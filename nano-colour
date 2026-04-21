@@ -2,11 +2,20 @@
 use strict;
 use warnings;
 use File::Basename;
+use Getopt::Long;
 
-my ($target_file, $nanorc_dir) = @ARGV;
+my $forced_syntax;
+GetOptions("syntax|s=s" => \$forced_syntax) or die "Usage: $0 [-s syntax] [file] [nanorc_dir]\n";
 
-if (!$target_file || !$nanorc_dir || !-d $nanorc_dir) {
-    die "Usage: $0 <file_to_color> <nanorc_directory>\n";
+my $target_file = shift @ARGV;
+my $nanorc_dir  = shift @ARGV // $ENV{NANOCOLOUR_DIR};
+
+if (!$nanorc_dir || !-d $nanorc_dir) {
+    die "Usage: $0 [-s syntax] [file] [nanorc_dir]\n(Set NANOCOLOUR_DIR or provide nanorc_dir argument)\n";
+}
+
+if (!$target_file && !$forced_syntax) {
+    die "Usage: $0 [-s syntax] [file] [nanorc_dir]\n";
 }
 
 my %color_map = (
@@ -50,7 +59,7 @@ my @rc_files = sort grep { /\.nanorc$/ } readdir($dh);
 closedir($dh);
 
 my $selected_syntax;
-my $target_basename = basename($target_file);
+my $target_basename = $target_file ? basename($target_file) : "";
 
 foreach my $rc_file (@rc_files) {
     open(my $fh, "<", "$nanorc_dir/$rc_file") or next;
@@ -65,11 +74,17 @@ foreach my $rc_file (@rc_files) {
                 push @extensions, $1 // $2;
             }
             last;
+        } elsif (/^\s*syntax\s+["']?([^"'\s]+)["']?\s*$/) {
+            $syntax_name = $1;
+            last;
         }
     }
     close($fh);
     
-    if ($syntax_name) {
+    if ($forced_syntax && $syntax_name eq $forced_syntax) {
+        $selected_syntax = { name => $syntax_name, file => "$nanorc_dir/$rc_file" };
+        last;
+    } elsif (!$forced_syntax && $syntax_name && $target_basename) {
         foreach my $ext_re (@extensions) {
             my $re = $ext_re;
             $re =~ s/\\</\\b/g;
@@ -83,11 +98,17 @@ foreach my $rc_file (@rc_files) {
     last if $selected_syntax;
 }
 
+my $in_fh;
+if ($target_file && $target_file ne '-') {
+    open($in_fh, "<", $target_file) or die "Cannot open $target_file: $!";
+} else {
+    $in_fh = \*STDIN;
+}
+
 if (!$selected_syntax) {
     # Default to plain text
-    open(my $fh, "<", $target_file) or die "Cannot open $target_file: $!";
-    print while <$fh>;
-    close($fh);
+    print while <$in_fh>;
+    close($in_fh);
     exit;
 }
 
@@ -122,11 +143,10 @@ while (<$fh>) {
 }
 close($fh);
 
-# Process the target file
-open(my $in, "<", $target_file) or die "Cannot open $target_file: $!";
+# Process the target stream
 my $current_multi_rule = undef;
 
-while (my $line = <$in>) {
+while (my $line = <$in_fh>) {
     chomp $line;
     my @chars = split(//, $line);
     my @char_ansi = ("\e[0m") x (scalar(@chars) + 1);
@@ -204,4 +224,4 @@ while (my $line = <$in>) {
     }
     print "\e[0m\n";
 }
-close($in);
+close($in_fh);
