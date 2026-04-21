@@ -1,0 +1,21 @@
+syntax "git-tag" "/TAG_EDITMSG$"
+comment "#"
+
+## We use cyan for the things that are relevant to the commit
+## in progress.
+
+# Comments (the section that git includes)
+color green "^#.*"
+
+# Line length markers (72 character limit)
+color red         "^[^#].*$"
+color normal      "^[^#].{0,72}"
+
+# Tag highlighting
+color cyan "^#   [a-zA-Z0-9][A-Za-z0-9/_-]*"
+
+# Headings
+color magenta "^# Write a message for tag:"
+
+# And reset the leading hash to green
+color green  "^#[	 ]"

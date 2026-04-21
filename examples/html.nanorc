@@ -1,0 +1,36 @@
+syntax html "\.(html|htm|hsc)?$"
+magic "HTML document"
+comment "<!--|-->"
+#formatter tidy -m -q
+
+# Elements:
+color red start="<" end=">"
+
+# HSC preprocessing
+color magenta start="</?\$" end=">"
+
+# Named entities:
+color red "&[^;[:space:]]*;"
+
+# Attributes:
+color cyan "\<(abbr|accept(-charset)?|accesskey|action|alink|align|alt|archive|axis|background|bgcolor|border)="
+color cyan "\<(cell(padding|spacing)|char(off|set)?|checked|cite|class(id)?|compact|code(base|tag)?|cols(pan)?)="
+color cyan "\<(content(editable)?|contextmenu|coords|data|datetime|declare|defer|dir|disabled|enctype)="
+color cyan "\<(for|frame(border)?|headers|height|hidden|href(lang)?|hspace|http-equiv|id|ismap)="
+color cyan "\<(label|lang|link|longdesc|margin(height|width)|maxlength|media|method|multiple)="
+color cyan "\<(name|nohref|noresize|noshade|object|onclick|onfocus|onload|onmouseover|profile|readonly|rel|rev)="
+color cyan "\<(rows(pan)?|rules|scheme|scope|scrolling|selected|shape|size|span|src|standby|start|style|summary)="
+color cyan "\<(tabindex|target|text|title|type|usemap|valign|value(type)?|vlink|vspace|width|xmlns|xml:space)="
+
+# Strings:
+color brightblue "="(\\.|[^"])*""
+color brightblue "='(\\.|[^'])*'"
+color white "="
+
+# Make the element ends and character entities white, so that the element names themselves stand out
+color white "</?|>|&"
+
+# Comments:
+color green start="<!--" end="-->"
+# HSC comments:
+color green start="<\*" end="\*>"
