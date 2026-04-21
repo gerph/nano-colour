@@ -5,17 +5,21 @@ use File::Basename;
 use Getopt::Long;
 
 my $forced_syntax;
-GetOptions("syntax|s=s" => \$forced_syntax) or die "Usage: $0 [-s syntax] [file] [nanorc_dir]\n";
+my $check_supported;
+GetOptions(
+    "syntax|s=s" => \$forced_syntax,
+    "supported"  => \$check_supported,
+) or die "Usage: $0 [-s syntax] [--supported] [file] [nanorc_dir]\n";
 
 my $target_file = shift @ARGV;
 my $nanorc_dir  = shift @ARGV // $ENV{NANOCOLOUR_DIR};
 
 if (!$nanorc_dir || !-d $nanorc_dir) {
-    die "Usage: $0 [-s syntax] [file] [nanorc_dir]\n(Set NANOCOLOUR_DIR or provide nanorc_dir argument)\n";
+    die "Usage: $0 [-s syntax] [--supported] [file] [nanorc_dir]\n(Set NANOCOLOUR_DIR or provide nanorc_dir argument)\n";
 }
 
-if (!$target_file && !$forced_syntax) {
-    die "Usage: $0 [-s syntax] [file] [nanorc_dir]\n";
+if (!$target_file && !$forced_syntax && !$check_supported) {
+    die "Usage: $0 [-s syntax] [--supported] [file] [nanorc_dir]\n";
 }
 
 my %color_map = (
@@ -99,6 +103,15 @@ foreach my $rc_file (@rc_files) {
         }
     }
     last if $selected_syntax;
+}
+
+if ($check_supported) {
+    if ($selected_syntax) {
+        print "$selected_syntax->{name}\n";
+        exit 0;
+    } else {
+        exit 1;
+    }
 }
 
 my $in_fh;
