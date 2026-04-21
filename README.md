@@ -1,4 +1,4 @@
-# RISC OS nano-colour
+# nano-colour - colouring files using nanorc definitions
 
 This repository provides a Perl-based syntax highlighter that leverages `nanorc` configuration files to provide ANSI-colored output in the terminal.
 
