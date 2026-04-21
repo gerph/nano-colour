@@ -27,21 +27,24 @@ my %color_map = (
     magenta => 5,
     cyan    => 6,
     white   => 7,
+    normal  => 9,
 );
 
 sub get_ansi {
     my ($fg, $bg) = @_;
     my $ansi = "\e[0m";
-    return $ansi unless defined $fg && $fg ne "";
+    return $ansi unless (defined $fg && $fg ne "") || (defined $bg && $bg ne "");
     
-    my $bright = 0;
-    if ($fg =~ s/^bright//i) {
-        $bright = 1;
-    }
-    
-    my $fg_code = $color_map{lc($fg)};
-    if (defined $fg_code) {
-        $ansi .= "\e[" . ($bright ? "1;" : "") . (30 + $fg_code) . "m";
+    if (defined $fg && $fg ne "") {
+        my $bright = 0;
+        if ($fg =~ s/^bright//i) {
+            $bright = 1;
+        }
+        
+        my $fg_code = $color_map{lc($fg)};
+        if (defined $fg_code) {
+            $ansi .= "\e[" . ($bright ? "1;" : "") . (30 + $fg_code) . "m";
+        }
     }
     
     if (defined $bg && $bg ne "") {
