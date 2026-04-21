@@ -132,11 +132,21 @@ while (<$fh>) {
             $e =~ s/\\</\\b/g; $e =~ s/\\>/\\b/g;
             push @rules, { type => 'multi', start => $s, end => $e, ansi => $ansi, icase => $icase };
         } else {
-            while ($rest =~ /"((?:[^"\\]|\\.)*)"|(\S+)/g) {
-                my $re = $1 // $2;
-                next if $re eq "";
-                $re =~ s/\\</\\b/g; $re =~ s/\\>/\\b/g;
-                push @rules, { type => 'single', re => $re, ansi => $ansi, icase => $icase };
+            my @raw = split(/(\s+)/, $rest);
+            while (@raw) {
+                my $p = shift @raw;
+                next if $p =~ /^\s*$/;
+                if ($p =~ /^"/ && ($p !~ /[^\\]"$/ || $p eq '"')) {
+                    while (@raw) {
+                        $p .= shift @raw;
+                        last if $p =~ /[^\\]"$/;
+                    }
+                }
+                $p =~ s/^"//;
+                $p =~ s/"$//;
+                next if $p eq "";
+                $p =~ s/\\</\\b/g; $p =~ s/\\>/\\b/g;
+                push @rules, { type => 'single', re => $p, ansi => $ansi, icase => $icase };
             }
         }
     }
