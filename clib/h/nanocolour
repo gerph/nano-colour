@@ -1,0 +1,101 @@
+/*******************************************************************
+ * File:        nanocolour
+ * Purpose:     NanoColour library interface
+ * Author:      Gemini CLI
+ ******************************************************************/
+
+#ifndef NANOCOLOUR_H
+#define NANOCOLOUR_H
+
+#include <stddef.h>
+
+typedef enum {
+    COLOUR_BLACK = 0,
+    COLOUR_RED = 1,
+    COLOUR_GREEN = 2,
+    COLOUR_YELLOW = 3,
+    COLOUR_BLUE = 4,
+    COLOUR_MAGENTA = 5,
+    COLOUR_CYAN = 6,
+    COLOUR_WHITE = 7,
+    COLOUR_NORMAL = 9
+} Colour;
+
+typedef struct {
+    Colour fg;
+    Colour bg;
+    int bright;
+} Style;
+
+typedef struct {
+    int x_pos;
+    const char *text_start;
+    size_t text_length;
+    Style style;
+} ColouredElement;
+
+typedef struct {
+    int line_number;
+    size_t element_count;
+    ColouredElement *elements;
+} ColouredLine;
+
+typedef struct {
+    char *contents;
+    size_t length;
+    size_t line_count;
+    ColouredLine *lines;
+} ColouredFile;
+
+typedef enum {
+    RULE_SINGLE,
+    RULE_MULTI
+} RuleType;
+
+typedef struct {
+    RuleType type;
+    char *re_start;
+    char *re_end;
+    Style style;
+    int icase;
+} SyntaxRule;
+
+typedef struct {
+    char *name;
+    size_t rule_count;
+    SyntaxRule *rules;
+} Syntax;
+
+/* Function prototypes */
+
+/**
+ * Reads a file into a single memory block.
+ * The returned pointer must be freed by the caller.
+ */
+char *nanocolour_read_file(const char *filename, size_t *length);
+
+/**
+ * Parses a single nanorc file into a Syntax structure.
+ * Includes are ignored.
+ */
+Syntax *nanocolour_parse_rc(const char *filename);
+
+/**
+ * Colours a file content using the provided syntax rules.
+ * The contents are assumed to be owned by the caller or will be copied?
+ * The structure requirements say "pointer to the file contents in memory", 
+ * so it should probably point to the memory block read.
+ */
+ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax *syntax);
+
+/**
+ * Frees a Syntax structure.
+ */
+void nanocolour_free_syntax(Syntax *syntax);
+
+/**
+ * Frees a ColouredFile structure.
+ */
+void nanocolour_free_coloured_file(ColouredFile *file);
+
+#endif /* NANOCOLOUR_H */

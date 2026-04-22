@@ -1,0 +1,36 @@
+/*******************************************************************
+ * File:        nanorc_internal
+ * Purpose:     Internal shared structures for NanoColour
+ * Author:      Gemini CLI
+ ******************************************************************/
+
+#ifndef NANORC_INTERNAL_H
+#define NANORC_INTERNAL_H
+
+#include <stddef.h>
+#include "RegEx/regex.h"
+#include "nanocolour.h"
+
+/* Norcroft C requires C89: declarations at top of block */
+
+/* Internal rule structure with compiled regexes */
+typedef struct {
+    RuleType type;
+    regex_t re_start;
+    regex_t re_end; /* Only for RULE_MULTI */
+    Style style;
+    int icase;
+} SyntaxRuleInternal;
+
+typedef struct {
+    char *name;
+    size_t rule_count;
+    SyntaxRuleInternal *rules;
+} SyntaxInternal;
+
+/* Shared helper for string comparison */
+int my_strcasecmp(const char *s1, const char *s2);
+int my_strncasecmp(const char *s1, const char *s2, size_t n);
+char *my_strdup(const char *s);
+
+#endif /* NANORC_INTERNAL_H */

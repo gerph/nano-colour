@@ -1,22 +1,95 @@
 /*******************************************************************
  * File:        main
  * Purpose:     NanoColour command line tool
- * Author:      YOUR NAME
+ * Author:      Gemini CLI
  ******************************************************************/
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
-#include "RegEx/regex.h"
-
+#include "nanocolour.h"
 #include "VersionNum"
 
-#include "main.h"
+static const char *colour_to_name(Colour c) {
+    switch(c) {
+        case COLOUR_BLACK: return "black";
+        case COLOUR_RED: return "red";
+        case COLOUR_GREEN: return "green";
+        case COLOUR_YELLOW: return "yellow";
+        case COLOUR_BLUE: return "blue";
+        case COLOUR_MAGENTA: return "magenta";
+        case COLOUR_CYAN: return "cyan";
+        case COLOUR_WHITE: return "white";
+        case COLOUR_NORMAL: return "normal";
+        default: return "unknown";
+    }
+}
 
 int main(int argc, char *argv[])
 {
-    printf("NanoColour " Module_FullVersionAndDate "\n");
-    printf("Syntax: *NanoColour\n");
+    char *target_file;
+    char *nanorc_file;
+    Syntax *syntax;
+    size_t length;
+    char *contents;
+    ColouredFile *cf;
+    size_t i;
 
-    exit(EXIT_SUCCESS);
+    if (argc < 3) {
+        printf("NanoColour " Module_FullVersionAndDate "\n");
+        printf("Syntax: *NanoColour <file> <nanorc>\n");
+        return EXIT_FAILURE;
+    }
+
+    target_file = argv[1];
+    nanorc_file = argv[2];
+
+    syntax = nanocolour_parse_rc(nanorc_file);
+    if (!syntax) {
+        fprintf(stderr, "Failed to parse nanorc file: %s\n", nanorc_file);
+        return EXIT_FAILURE;
+    }
+
+    contents = nanocolour_read_file(target_file, &length);
+    if (!contents) {
+        fprintf(stderr, "Failed to read target file: %s\n", target_file);
+        nanocolour_free_syntax(syntax);
+        return EXIT_FAILURE;
+    }
+
+    cf = nanocolour_colour_file(contents, length, syntax);
+    if (!cf) {
+        fprintf(stderr, "Failed to colour file: %s\n", target_file);
+        free(contents);
+        nanocolour_free_syntax(syntax);
+        return EXIT_FAILURE;
+    }
+
+    printf("File: %s\n", target_file);
+    printf("Length: %lu\n", (unsigned long)cf->length);
+    printf("Line count: %lu\n", (unsigned long)cf->line_count);
+
+    for (i = 0; i < cf->line_count; i++) {
+        ColouredLine *line = &cf->lines[i];
+        size_t j;
+        printf("Line %d (elements: %lu):\n", line->line_number, (unsigned long)line->element_count);
+        for (j = 0; j < line->element_count; j++) {
+            ColouredElement *el = &line->elements[j];
+            printf("  Element %lu: x=%d, len=%lu, style=%s%s", 
+                   (unsigned long)j, el->x_pos, (unsigned long)el->text_length,
+                   el->style.bright ? "bright" : "",
+                   colour_to_name(el->style.fg));
+            if (el->style.bg != COLOUR_NORMAL) {
+                printf(",%s", colour_to_name(el->style.bg));
+            }
+            printf(" text=\"%.*s\"\n", (int)el->text_length, el->text_start);
+        }
+    }
+
+    nanocolour_free_coloured_file(cf);
+    free(contents);
+    nanocolour_free_syntax(syntax);
+
+    return EXIT_SUCCESS;
 }
