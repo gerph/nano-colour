@@ -1,0 +1,67 @@
+/*******************************************************************
+ * File:        testrender
+ * Purpose:     Demonstrate NanoColour rendering
+ * Author:      Gemini CLI
+ ******************************************************************/
+
+#include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include "swis.h"
+#include "GContext/gcontext.h"
+#include "nanocolour.h"
+#include "nanocolour_render.h"
+
+#define FONT_NAME "Corpus.Medium"
+#define FONT_XSIZE (12*16)
+#define FONT_YSIZE (12*16)
+
+void testrender(const char *target_file, const char *nanorc_file)
+{
+    gcontext_t *gcontext = gcontext_initvdu(2);
+    size_t length;
+    char *contents;
+    Syntax *syntax;
+    ColouredFile *cf;
+    font_t font;
+    NanoRender *render;
+    bounds_t size;
+
+    /* Load some data to render */
+    contents = nanocolour_read_file(target_file, &length);
+    if (!contents) {
+        fprintf(stderr, "testrender: Failed to read %s\n", target_file);
+        return;
+    }
+
+    syntax = nanocolour_parse_rc(nanorc_file);
+    if (!syntax) {
+        fprintf(stderr, "testrender: Failed to parse %s\n", nanorc_file);
+        free(contents);
+        return;
+    }
+
+    cf = nanocolour_colour_file(contents, length, syntax);
+    if (!cf) {
+        fprintf(stderr, "testrender: Failed to colour file\n");
+        nanocolour_free_syntax(syntax);
+        free(contents);
+        return;
+    }
+
+    font = gcontext->text_findfont(gcontext, FONT_NAME, FONT_XSIZE, FONT_YSIZE);
+    
+    render = nanocolour_render_create(cf, gcontext, font);
+    
+    nanocolour_render_get_size(render, &size);
+    printf("Rendered size: %d x %d\n", size.width, size.height);
+
+    /* Draw it at 64, 1000 with black background and white foreground for normal text */
+    nanocolour_render_draw(render, 64, 1000, COLOUR_RGB(0, 0, 0), COLOUR_RGB(255, 255, 255), NULL);
+
+    nanocolour_render_free(render);
+    nanocolour_free_coloured_file(cf);
+    nanocolour_free_syntax(syntax);
+    free(contents);
+}

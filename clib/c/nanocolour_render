@@ -1,0 +1,171 @@
+/*******************************************************************
+ * File:        nanocolour_render
+ * Purpose:     Rendering implementation for NanoColour
+ * Author:      Gemini CLI
+ ******************************************************************/
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+#include "nanocolour_render.h"
+
+/* Comment out to disable debug */
+//#define DEBUG
+
+#ifdef DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
+
+typedef struct {
+    int32_t y_offset; /* relative to top, positive downwards */
+    int32_t height;
+    int32_t ascent;
+    int32_t width;
+} LineRenderInfo;
+
+struct NanoRender_s {
+    const ColouredFile *file;
+    gcontext_t *gc;
+    font_t font;
+    bounds_t total_bounds;
+    LineRenderInfo *line_info;
+    bool size_valid;
+};
+
+static colour_t map_colour(Colour c, int bright) {
+    switch (c) {
+        case COLOUR_BLACK:   return COLOUR_RGB(0, 0, 0);
+        case COLOUR_RED:     return bright ? COLOUR_RGB(255, 85, 85) : COLOUR_RGB(170, 0, 0);
+        case COLOUR_GREEN:   return bright ? COLOUR_RGB(85, 255, 85) : COLOUR_RGB(0, 170, 0);
+        case COLOUR_YELLOW:  return bright ? COLOUR_RGB(255, 255, 85) : COLOUR_RGB(170, 170, 0);
+        case COLOUR_BLUE:    return bright ? COLOUR_RGB(85, 85, 255) : COLOUR_RGB(0, 0, 170);
+        case COLOUR_MAGENTA: return bright ? COLOUR_RGB(255, 85, 255) : COLOUR_RGB(170, 0, 170);
+        case COLOUR_CYAN:    return bright ? COLOUR_RGB(85, 255, 255) : COLOUR_RGB(0, 170, 170);
+        case COLOUR_WHITE:   return bright ? COLOUR_RGB(255, 255, 255) : COLOUR_RGB(170, 170, 170);
+        case COLOUR_NORMAL:  return COLOUR_RGB(0, 0, 0);
+        default:             return COLOUR_RGB(0, 0, 0);
+    }
+}
+
+static void calculate_sizes(NanoRender *r) {
+    size_t i;
+    int32_t cur_y = 0;
+    int32_t max_w = 0;
+    bounds_t em;
+
+    if (r->size_valid) return;
+    
+    r->line_info = realloc(r->line_info, r->file->line_count * sizeof(LineRenderInfo));
+    em = r->gc->text_getemsize(r->gc, r->font);
+    
+    for (i = 0; i < r->file->line_count; i++) {
+        const ColouredLine *line = &r->file->lines[i];
+        int32_t line_w = 0;
+        int32_t line_ascent = em.height;
+        int32_t line_descent = 0;
+        size_t j;
+        
+        for (j = 0; j < line->element_count; j++) {
+            const ColouredElement *el = &line->elements[j];
+            stringbounds_t b;
+            r->gc->text_getstringsize(r->gc, r->font, &b, 0x7FFFFFFF, 
+                                      el->text_start, el->text_length, GCONTEXT_NOSPLIT);
+            line_w += b.xoffset;
+            if (b.ascent > line_ascent) line_ascent = b.ascent;
+            if (b.descent < line_descent) line_descent = b.descent;
+        }
+        
+        r->line_info[i].y_offset = cur_y;
+        r->line_info[i].ascent = line_ascent;
+        r->line_info[i].height = line_ascent - line_descent;
+        r->line_info[i].width = line_w;
+        
+        cur_y += r->line_info[i].height;
+        if (line_w > max_w) max_w = line_w;
+    }
+    
+    r->total_bounds.width = max_w;
+    r->total_bounds.height = cur_y;
+    r->size_valid = true;
+}
+
+NanoRender *nanocolour_render_create(const ColouredFile *file, gcontext_t *gc, font_t font) {
+    NanoRender *r = calloc(1, sizeof(NanoRender));
+    if (r) {
+        r->file = file;
+        r->gc = gc;
+        r->font = font;
+        calculate_sizes(r);
+    }
+    return r;
+}
+
+void nanocolour_render_free(NanoRender *render) {
+    if (render) {
+        free(render->line_info);
+        free(render);
+    }
+}
+
+void nanocolour_render_get_size(NanoRender *render, bounds_t *bounds) {
+    if (render && bounds) {
+        calculate_sizes(render);
+        *bounds = render->total_bounds;
+    }
+}
+
+void nanocolour_render_draw(NanoRender *render, int x, int y, colour_t bg_colour, colour_t fg_colour, const bbox_t *clip) {
+    size_t i;
+    if (!render) return;
+    calculate_sizes(render);
+
+    if (bg_colour != COLOUR_NONE) {
+        render->gc->rectangle_fill(render->gc, bg_colour, 
+                                   x, y - render->total_bounds.height, 
+                                   x + render->total_bounds.width, y);
+    }
+
+    for (i = 0; i < render->file->line_count; i++) {
+        const ColouredLine *line = &render->file->lines[i];
+        LineRenderInfo *info = &render->line_info[i];
+        int32_t line_top = y - info->y_offset;
+        int32_t line_bottom = line_top - info->height;
+        int32_t cur_x = x;
+        size_t j;
+
+        /* Clipping check */
+        if (clip) {
+            if (line_top < clip->y0 || line_bottom > clip->y1) continue;
+        }
+
+        for (j = 0; j < line->element_count; j++) {
+            const ColouredElement *el = &line->elements[j];
+            colour_t fg = (el->style.fg == COLOUR_NORMAL) ? fg_colour : map_colour(el->style.fg, el->style.bright);
+            colour_t bg = (el->style.bg == COLOUR_NORMAL) ? COLOUR_NONE : map_colour(el->style.bg, 0);
+            
+            /* GContext text_paint takes xb, yb (baseline) */
+            render->gc->text_paint(render->gc, render->font, 
+                                   cur_x, line_top - info->ascent,
+                                   bg, fg, 
+                                   el->text_start, el->text_length);
+            
+            {
+                stringbounds_t b;
+                render->gc->text_getstringsize(render->gc, render->font, &b, 0x7FFFFFFF,
+                                               el->text_start, el->text_length, GCONTEXT_NOSPLIT);
+                cur_x += b.xoffset;
+            }
+        }
+    }
+}
+
+void nanocolour_render_set_font(NanoRender *render, font_t font) {
+    if (render) {
+        render->font = font;
+        render->size_valid = false;
+        calculate_sizes(render);
+    }
+}

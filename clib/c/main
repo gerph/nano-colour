@@ -11,8 +11,16 @@
 #include "nanocolour.h"
 #include "VersionNum"
 
-void testgcontext(void);
+/* Comment out to disable debug */
+//#define DEBUG
 
+#ifdef DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
+
+void testrender(const char *target_file, const char *nanorc_file);
 
 static const char *colour_to_name(Colour c) {
     switch(c) {
@@ -29,37 +37,25 @@ static const char *colour_to_name(Colour c) {
     }
 }
 
-int main(int argc, char *argv[])
+static void decode_and_print(const char *target_file, const char *nanorc_file)
 {
-#if 0
-    char *target_file;
-    char *nanorc_file;
     Syntax *syntax;
     size_t length;
     char *contents;
     ColouredFile *cf;
     size_t i;
 
-    if (argc < 3) {
-        printf("NanoColour " Module_FullVersionAndDate "\n");
-        printf("Syntax: *NanoColour <file> <nanorc>\n");
-        return EXIT_FAILURE;
-    }
-
-    target_file = argv[1];
-    nanorc_file = argv[2];
-
     syntax = nanocolour_parse_rc(nanorc_file);
     if (!syntax) {
         fprintf(stderr, "Failed to parse nanorc file: %s\n", nanorc_file);
-        return EXIT_FAILURE;
+        return;
     }
 
     contents = nanocolour_read_file(target_file, &length);
     if (!contents) {
         fprintf(stderr, "Failed to read target file: %s\n", target_file);
         nanocolour_free_syntax(syntax);
-        return EXIT_FAILURE;
+        return;
     }
 
     cf = nanocolour_colour_file(contents, length, syntax);
@@ -67,7 +63,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Failed to colour file: %s\n", target_file);
         free(contents);
         nanocolour_free_syntax(syntax);
-        return EXIT_FAILURE;
+        return;
     }
 
     printf("File: %s\n", target_file);
@@ -94,10 +90,25 @@ int main(int argc, char *argv[])
     nanocolour_free_coloured_file(cf);
     free(contents);
     nanocolour_free_syntax(syntax);
- #endif
+}
 
-    /* Prove the GContext works - to be removed */
-    testgcontext();
+int main(int argc, char *argv[])
+{
+    if (argc < 4) {
+        printf("NanoColour " Module_FullVersionAndDate "\n");
+        printf("Syntax: *NanoColour -decode <file> <nanorc>\n");
+        printf("        *NanoColour -draw <file> <nanorc>\n");
+        return EXIT_FAILURE;
+    }
+
+    if (strcmp(argv[1], "-decode") == 0) {
+        decode_and_print(argv[2], argv[3]);
+    } else if (strcmp(argv[1], "-draw") == 0) {
+        testrender(argv[2], argv[3]);
+    } else {
+        fprintf(stderr, "Unknown option: %s\n", argv[1]);
+        return EXIT_FAILURE;
+    }
 
     return EXIT_SUCCESS;
 }

@@ -11,6 +11,15 @@
 #include "nanocolour.h"
 #include "nanorc_internal.h"
 
+/* Comment out to disable debug */
+//#define DEBUG
+
+#ifdef DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
+
 char *nanocolour_read_file(const char *filename, size_t *length) {
     FILE *f = fopen(filename, "rb");
     char *buf;
@@ -100,14 +109,16 @@ ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax
                 regmatch_t pmatch;
                 int offset = 0;
                 while (regexec(&rule->re_start, line_text + offset, 1, &pmatch, 0) == 0) {
-                    int start = offset + pmatch.rm_so;
-                    int end_m = offset + pmatch.rm_eo;
+                    int start = offset + (int)pmatch.rm_so;
+                    int end_m = offset + (int)pmatch.rm_eo;
+                    dprintf("Line %d match rule %d at %d-%d\n", (int)l+1, (int)r_idx, start, end_m); fflush(stdout);
                     for (i = (size_t)start; i < (size_t)end_m; i++) styles[i] = rule->style;
                     if (pmatch.rm_so == pmatch.rm_eo) offset++;
                     else offset = end_m;
                     if (offset >= (int)len) break;
                 }
             } else {
+
                 regmatch_t pmatch_s;
                 int offset = 0;
                 while (regexec(&rule->re_start, line_text + offset, 1, &pmatch_s, 0) == 0) {

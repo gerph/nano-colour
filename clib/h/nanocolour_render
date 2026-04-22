@@ -1,0 +1,45 @@
+/*******************************************************************
+ * File:        nanocolour_render
+ * Purpose:     Rendering interface for NanoColour
+ * Author:      Gemini CLI
+ ******************************************************************/
+
+#ifndef NANOCOLOUR_RENDER_H
+#define NANOCOLOUR_RENDER_H
+
+#include "GContext/gcontext.h"
+#include "nanocolour.h"
+
+typedef struct NanoRender_s NanoRender;
+
+/**
+ * Creates a rendering structure for the given coloured file.
+ * The font handle is used for sizing and rendering.
+ */
+NanoRender *nanocolour_render_create(const ColouredFile *file, gcontext_t *gc, font_t font);
+
+/**
+ * Frees the rendering structure.
+ */
+void nanocolour_render_free(NanoRender *render);
+
+/**
+ * Returns the total size of the rendered text.
+ */
+void nanocolour_render_get_size(NanoRender *render, bounds_t *bounds);
+
+/**
+ * Renders the text at the specified top-left position.
+ * bg_colour is used as a background for the entire area. Use COLOUR_NONE for none.
+ * fg_colour is used for text segments with COLOUR_NORMAL.
+ * clip is an optional bounding box for fast rejection/clipping.
+ */
+void nanocolour_render_draw(NanoRender *render, int x, int y, colour_t bg_colour, colour_t fg_colour, const bbox_t *clip);
+
+/**
+ * Updates the font used for rendering.
+ * This invalidates cached sizes and offsets.
+ */
+void nanocolour_render_set_font(NanoRender *render, font_t font);
+
+#endif /* NANOCOLOUR_RENDER_H */
