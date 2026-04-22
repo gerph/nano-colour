@@ -1,0 +1,251 @@
+/*******************************************************************
+ * File:        nanorc_parser
+ * Purpose:     NanoRC parser implementation
+ * Author:      Gemini CLI
+ ******************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#include "nanocolour.h"
+#include "nanorc_internal.h"
+
+int my_strcasecmp(const char *s1, const char *s2) {
+    while (*s1 && (tolower(*s1) == tolower(*s2))) {
+        s1++; s2++;
+    }
+    return tolower(*(unsigned char *)s1) - tolower(*(unsigned char *)s2);
+}
+
+int my_strncasecmp(const char *s1, const char *s2, size_t n) {
+    if (n == 0) return 0;
+    while (n-- > 0 && *s1 && (tolower(*s1) == tolower(*s2))) {
+        if (n == 0 || !*s1) break;
+        s1++; s2++;
+    }
+    return tolower(*(unsigned char *)s1) - tolower(*(unsigned char *)s2);
+}
+
+char *my_strdup(const char *s) {
+    size_t len = strlen(s) + 1;
+    char *res = malloc(len);
+    if (res) memcpy(res, s, len);
+    return res;
+}
+
+static Colour name_to_colour(const char *name) {
+    if (my_strcasecmp(name, "black") == 0) return COLOUR_BLACK;
+    if (my_strcasecmp(name, "red") == 0) return COLOUR_RED;
+    if (my_strcasecmp(name, "green") == 0) return COLOUR_GREEN;
+    if (my_strcasecmp(name, "yellow") == 0) return COLOUR_YELLOW;
+    if (my_strcasecmp(name, "blue") == 0) return COLOUR_BLUE;
+    if (my_strcasecmp(name, "magenta") == 0) return COLOUR_MAGENTA;
+    if (my_strcasecmp(name, "cyan") == 0) return COLOUR_CYAN;
+    if (my_strcasecmp(name, "white") == 0) return COLOUR_WHITE;
+    if (my_strcasecmp(name, "normal") == 0) return COLOUR_NORMAL;
+    return COLOUR_NORMAL;
+}
+
+static Style parse_style(const char *colors_str) {
+    Style s;
+    char *buf;
+    char *comma;
+    char *fg;
+    char *bg = NULL;
+
+    s.fg = COLOUR_NORMAL;
+    s.bg = COLOUR_NORMAL;
+    s.bright = 0;
+
+    buf = my_strdup(colors_str);
+    comma = strchr(buf, ',');
+    fg = buf;
+
+    if (comma) {
+        *comma = '\0';
+        bg = comma + 1;
+    }
+
+    if (my_strncasecmp(fg, "bright", 6) == 0) {
+        s.bright = 1;
+        fg += 6;
+    }
+
+    s.fg = name_to_colour(fg);
+    if (bg) {
+        s.bg = name_to_colour(bg);
+    }
+
+    free(buf);
+    return s;
+}
+
+static char *extract_quoted(char **ptr) {
+    char *s = *ptr;
+    char *start;
+    char *res;
+    char *d;
+    char *src;
+
+    while (*s && isspace(*s)) s++;
+    if (*s != '"') {
+        start = s;
+        while (*s && !isspace(*s)) s++;
+        if (*s) {
+            *s = '\0';
+            *ptr = s + 1;
+        } else {
+            *ptr = s;
+        }
+        return my_strdup(start);
+    }
+    s++;
+    start = s;
+    while (*s && (*s != '"' || (s > start && *(s-1) == '\\'))) {
+        s++;
+    }
+    if (*s == '"') {
+        *s = '\0';
+        *ptr = s + 1;
+    } else {
+        *ptr = s;
+    }
+    res = my_strdup(start);
+    d = res;
+    src = res;
+    while (*src) {
+        if (*src == '\\' && *(src+1) == '"') {
+            src++;
+        }
+        *d++ = *src++;
+    }
+    *d = '\0';
+    return res;
+}
+
+static char *fix_regex(char *re) {
+    char *new_re = malloc(strlen(re) * 5 + 1);
+    char *d = new_re;
+    char *s = re;
+    while (*s) {
+        if (*s == '\\' && *(s+1) == '<') {
+            *d++ = '['; *d++ = ':'; *d++ = '<'; *d++ = ':'; *d++ = ']';
+            s += 2;
+        } else if (*s == '\\' && *(s+1) == '>') {
+            *d++ = '['; *d++ = ':'; *d++ = '>'; *d++ = ':'; *d++ = ']';
+            s += 2;
+        } else {
+            *d++ = *s++;
+        }
+    }
+    *d = '\0';
+    free(re);
+    return new_re;
+}
+
+Syntax *nanocolour_parse_rc(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    SyntaxInternal *si;
+    char line[4096];
+
+    if (!f) return NULL;
+
+    si = calloc(1, sizeof(SyntaxInternal));
+    while (fgets(line, sizeof(line), f)) {
+        char *p = line;
+        while (*p && isspace(*p)) p++;
+        if (*p == '#' || *p == '\0') continue;
+
+        if (strncmp(p, "syntax", 6) == 0 && isspace(p[6])) {
+            p += 7;
+            si->name = extract_quoted(&p);
+        } else if ((strncmp(p, "color", 5) == 0 && isspace(p[5])) ||
+                   (strncmp(p, "icolor", 6) == 0 && isspace(p[6]))) {
+            int icase = (*p == 'i');
+            char *colors_str;
+            Style style;
+
+            p += (icase ? 7 : 6);
+            while (*p && isspace(*p)) p++;
+            colors_str = p;
+            while (*p && !isspace(*p)) p++;
+            if (*p) {
+                *p = '\0';
+                p++;
+            }
+            style = parse_style(colors_str);
+
+            while (*p && isspace(*p)) p++;
+            if (strncmp(p, "start=", 6) == 0) {
+                p += 6;
+                {
+                    char *start_re = extract_quoted(&p);
+                    while (*p && isspace(*p)) p++;
+                    if (strncmp(p, "end=", 4) == 0) {
+                        p += 4;
+                        {
+                            char *end_re = extract_quoted(&p);
+                            char *f_start, *f_end;
+                            SyntaxRuleInternal *r;
+                            
+                            si->rules = realloc(si->rules, (si->rule_count + 1) * sizeof(SyntaxRuleInternal));
+                            r = &si->rules[si->rule_count++];
+                            r->type = RULE_MULTI;
+                            r->style = style;
+                            r->icase = icase;
+                            
+                            f_start = fix_regex(start_re);
+                            f_end = fix_regex(end_re);
+                            regcomp(&r->re_start, f_start, REG_EXTENDED | (icase ? REG_ICASE : 0));
+                            regcomp(&r->re_end, f_end, REG_EXTENDED | (icase ? REG_ICASE : 0));
+                            free(f_start);
+                            free(f_end);
+                        }
+                    }
+                }
+            } else {
+                while (*p) {
+                    char *re;
+                    while (*p && isspace(*p)) p++;
+                    if (!*p) break;
+                    re = extract_quoted(&p);
+                    if (re && *re) {
+                        char *f_re;
+                        SyntaxRuleInternal *r;
+                        si->rules = realloc(si->rules, (si->rule_count + 1) * sizeof(SyntaxRuleInternal));
+                        r = &si->rules[si->rule_count++];
+                        r->type = RULE_SINGLE;
+                        r->style = style;
+                        r->icase = icase;
+                        
+                        f_re = fix_regex(re);
+                        regcomp(&r->re_start, f_re, REG_EXTENDED | (icase ? REG_ICASE : 0));
+                        free(f_re);
+                    } else {
+                        free(re);
+                    }
+                }
+            }
+        }
+    }
+    fclose(f);
+    return (Syntax *)si;
+}
+
+void nanocolour_free_syntax(Syntax *syntax) {
+    size_t i;
+    SyntaxInternal *si;
+    if (!syntax) return;
+    si = (SyntaxInternal *)syntax;
+    free(si->name);
+    for (i = 0; i < si->rule_count; i++) {
+        regfree(&si->rules[i].re_start);
+        if (si->rules[i].type == RULE_MULTI) {
+            regfree(&si->rules[i].re_end);
+        }
+    }
+    free(si->rules);
+    free(si);
+}

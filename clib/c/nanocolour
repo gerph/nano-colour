@@ -1,0 +1,178 @@
+/*******************************************************************
+ * File:        nanocolour
+ * Purpose:     NanoColour colouring engine implementation
+ * Author:      Gemini CLI
+ ******************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "nanocolour.h"
+#include "nanorc_internal.h"
+
+char *nanocolour_read_file(const char *filename, size_t *length) {
+    FILE *f = fopen(filename, "rb");
+    char *buf;
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    *length = (size_t)ftell(f);
+    fseek(f, 0, SEEK_SET);
+    buf = malloc(*length + 1);
+    if (buf) {
+        fread(buf, 1, *length, f);
+        buf[*length] = '\0';
+    }
+    fclose(f);
+    return buf;
+}
+
+ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax *syntax) {
+    SyntaxInternal *si = (SyntaxInternal *)syntax;
+    ColouredFile *cf = calloc(1, sizeof(ColouredFile));
+    size_t line_count = 0;
+    size_t i;
+    char **line_ptrs;
+    size_t *line_lens;
+    size_t cur_line = 0;
+    char *p;
+    char *end;
+    SyntaxRuleInternal *current_multi_rule = NULL;
+    Style default_style;
+    size_t l;
+
+    cf->contents = contents;
+    cf->length = length;
+    default_style.fg = COLOUR_NORMAL;
+    default_style.bg = COLOUR_NORMAL;
+    default_style.bright = 0;
+
+    for (i = 0; i < length; i++) {
+        if (contents[i] == '\n') line_count++;
+    }
+    if (length > 0 && contents[length-1] != '\n') line_count++;
+    cf->line_count = line_count;
+    cf->lines = calloc(line_count, sizeof(ColouredLine));
+
+    line_ptrs = malloc(line_count * sizeof(char *));
+    line_lens = malloc(line_count * sizeof(size_t));
+    
+    p = contents;
+    end = contents + length;
+    while (p < end && cur_line < line_count) {
+        char *next;
+        line_ptrs[cur_line] = p;
+        next = memchr(p, '\n', end - p);
+        if (next) {
+            line_lens[cur_line] = next - p;
+            p = next + 1;
+        } else {
+            line_lens[cur_line] = end - p;
+            p = end;
+        }
+        cf->lines[cur_line].line_number = cur_line + 1;
+        cur_line++;
+    }
+
+    for (l = 0; l < line_count; l++) {
+        size_t len = line_lens[l];
+        char *line_text = malloc(len + 1);
+        Style *styles = malloc(len * sizeof(Style));
+        size_t r_idx;
+
+        memcpy(line_text, line_ptrs[l], len);
+        line_text[len] = '\0';
+
+        for (i = 0; i < len; i++) styles[i] = default_style;
+
+        if (current_multi_rule) {
+            regmatch_t pmatch;
+            for (i = 0; i < len; i++) styles[i] = current_multi_rule->style;
+            if (regexec(&current_multi_rule->re_end, line_text, 1, &pmatch, 0) == 0) {
+                for (i = pmatch.rm_eo; i < len; i++) styles[i] = default_style;
+                current_multi_rule = NULL;
+            }
+        }
+
+        for (r_idx = 0; r_idx < si->rule_count; r_idx++) {
+            SyntaxRuleInternal *rule = &si->rules[r_idx];
+            if (rule->type == RULE_SINGLE) {
+                regmatch_t pmatch;
+                int offset = 0;
+                while (regexec(&rule->re_start, line_text + offset, 1, &pmatch, 0) == 0) {
+                    int start = offset + pmatch.rm_so;
+                    int end_m = offset + pmatch.rm_eo;
+                    for (i = (size_t)start; i < (size_t)end_m; i++) styles[i] = rule->style;
+                    if (pmatch.rm_so == pmatch.rm_eo) offset++;
+                    else offset = end_m;
+                    if (offset >= (int)len) break;
+                }
+            } else {
+                regmatch_t pmatch_s;
+                int offset = 0;
+                while (regexec(&rule->re_start, line_text + offset, 1, &pmatch_s, 0) == 0) {
+                    int start = offset + pmatch_s.rm_so;
+                    int start_end = offset + pmatch_s.rm_eo;
+                    current_multi_rule = rule;
+                    for (i = (size_t)start; i < len; i++) styles[i] = rule->style;
+                    
+                    {
+                        regmatch_t pmatch_e;
+                        if (regexec(&rule->re_end, line_text + start_end, 1, &pmatch_e, 0) == 0) {
+                            int end_m = start_end + pmatch_e.rm_eo;
+                            for (i = (size_t)end_m; i < len; i++) styles[i] = default_style;
+                            current_multi_rule = NULL;
+                            offset = end_m;
+                        } else {
+                            break;
+                        }
+                    }
+                    if (offset >= (int)len) break;
+                }
+            }
+        }
+
+        if (len > 0) {
+            size_t elem_count = 0;
+            for (i = 0; i < len; i++) {
+                if (i == 0 || memcmp(&styles[i], &styles[i-1], sizeof(Style)) != 0) {
+                    elem_count++;
+                }
+            }
+            cf->lines[l].element_count = elem_count;
+            cf->lines[l].elements = calloc(elem_count, sizeof(ColouredElement));
+            {
+                size_t e = 0;
+                for (i = 0; i < len; i++) {
+                    if (i == 0 || memcmp(&styles[i], &styles[i-1], sizeof(Style)) != 0) {
+                        cf->lines[l].elements[e].x_pos = i;
+                        cf->lines[l].elements[e].text_start = line_ptrs[l] + i;
+                        cf->lines[l].elements[e].style = styles[i];
+                        if (e > 0) {
+                            cf->lines[l].elements[e-1].text_length = i - cf->lines[l].elements[e-1].x_pos;
+                        }
+                        e++;
+                    }
+                }
+                cf->lines[l].elements[e-1].text_length = len - cf->lines[l].elements[e-1].x_pos;
+            }
+        }
+
+        free(line_text);
+        free(styles);
+    }
+
+    free(line_ptrs);
+    free(line_lens);
+    return cf;
+}
+
+void nanocolour_free_coloured_file(ColouredFile *file) {
+    size_t i;
+    if (!file) return;
+    for (i = 0; i < file->line_count; i++) {
+        free(file->lines[i].elements);
+    }
+    free(file->lines);
+    free(file);
+}
