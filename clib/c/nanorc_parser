@@ -12,6 +12,15 @@
 #include "nanocolour.h"
 #include "nanorc_internal.h"
 
+/* Comment out to disable debug */
+//#define DEBUG
+
+#ifdef DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
+
 int my_strcasecmp(const char *s1, const char *s2) {
     while (*s1 && (tolower(*s1) == tolower(*s2))) {
         s1++; s2++;
@@ -126,15 +135,15 @@ static char *extract_quoted(char **ptr) {
 }
 
 static char *fix_regex(char *re) {
-    char *new_re = malloc(strlen(re) * 5 + 1);
+    char *new_re = malloc(strlen(re) * 7 + 1);
     char *d = new_re;
     char *s = re;
     while (*s) {
         if (*s == '\\' && *(s+1) == '<') {
-            *d++ = '['; *d++ = ':'; *d++ = '<'; *d++ = ':'; *d++ = ']';
+            *d++ = '['; *d++ = '['; *d++ = ':'; *d++ = '<'; *d++ = ':'; *d++ = ']'; *d++ = ']';
             s += 2;
         } else if (*s == '\\' && *(s+1) == '>') {
-            *d++ = '['; *d++ = ':'; *d++ = '>'; *d++ = ':'; *d++ = ']';
+            *d++ = '['; *d++ = '['; *d++ = ':'; *d++ = '>'; *d++ = ':'; *d++ = ']'; *d++ = ']';
             s += 2;
         } else {
             *d++ = *s++;
@@ -198,8 +207,20 @@ Syntax *nanocolour_parse_rc(const char *filename) {
                             
                             f_start = fix_regex(start_re);
                             f_end = fix_regex(end_re);
-                            regcomp(&r->re_start, f_start, REG_EXTENDED | (icase ? REG_ICASE : 0));
-                            regcomp(&r->re_end, f_end, REG_EXTENDED | (icase ? REG_ICASE : 0));
+                            {
+                                int err;
+                                char errbuf[256];
+                                err = regcomp(&r->re_start, f_start, REG_EXTENDED | (icase ? REG_ICASE : 0));
+                                if (err) {
+                                    regerror(err, &r->re_start, errbuf, sizeof(errbuf));
+                                    dprintf("regcomp start failed for '%s': %s\n", f_start, errbuf);
+                                }
+                                err = regcomp(&r->re_end, f_end, REG_EXTENDED | (icase ? REG_ICASE : 0));
+                                if (err) {
+                                    regerror(err, &r->re_end, errbuf, sizeof(errbuf));
+                                    dprintf("regcomp end failed for '%s': %s\n", f_end, errbuf);
+                                }
+                            }
                             free(f_start);
                             free(f_end);
                         }
@@ -221,7 +242,15 @@ Syntax *nanocolour_parse_rc(const char *filename) {
                         r->icase = icase;
                         
                         f_re = fix_regex(re);
-                        regcomp(&r->re_start, f_re, REG_EXTENDED | (icase ? REG_ICASE : 0));
+                        {
+                            int err;
+                            char errbuf[256];
+                            err = regcomp(&r->re_start, f_re, REG_EXTENDED | (icase ? REG_ICASE : 0));
+                            if (err) {
+                                regerror(err, &r->re_start, errbuf, sizeof(errbuf));
+                                dprintf("regcomp failed for '%s': %s\n", f_re, errbuf);
+                            }
+                        }
                         free(f_re);
                     } else {
                         free(re);
