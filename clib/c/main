@@ -11,6 +11,9 @@
 #include "nanocolour.h"
 #include "VersionNum"
 
+void testgcontext(void);
+
+
 static const char *colour_to_name(Colour c) {
     switch(c) {
         case COLOUR_BLACK: return "black";
@@ -28,6 +31,7 @@ static const char *colour_to_name(Colour c) {
 
 int main(int argc, char *argv[])
 {
+#if 0
     char *target_file;
     char *nanorc_file;
     Syntax *syntax;
@@ -90,6 +94,10 @@ int main(int argc, char *argv[])
     nanocolour_free_coloured_file(cf);
     free(contents);
     nanocolour_free_syntax(syntax);
+ #endif
+
+    /* Prove the GContext works - to be removed */
+    testgcontext();
 
     return EXIT_SUCCESS;
 }
