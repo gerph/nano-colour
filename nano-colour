@@ -62,46 +62,73 @@ sub get_ansi {
 
 # Parse nanorc files to find the right syntax
 opendir(my $dh, $nanorc_dir) or die "Cannot open $nanorc_dir: $!";
-my @rc_files = sort grep { /\.nanorc$/ } readdir($dh);
+my @rc_files = sort grep { /\.nanorc$/ || $_ eq 'nanorc' } readdir($dh);
 closedir($dh);
 
 my $selected_syntax;
-my $target_basename = $target_file ? basename($target_file) : "";
+my $target_path = $target_file // "";
+my $first_line = "";
+if ($target_file && $target_file ne '-') {
+    if (open(my $tfh, "<", $target_file)) {
+        $first_line = <$tfh> // "";
+        close($tfh);
+    }
+}
 
 foreach my $rc_file (@rc_files) {
     open(my $fh, "<", "$nanorc_dir/$rc_file") or next;
-    my $syntax_name = "";
-    my @extensions;
+    my $current_syntax;
     
     while (<$fh>) {
-        if (/^\s*syntax\s+["']?([^"'\s]+)["']?\s+(.*)/) {
-            $syntax_name = $1;
+        if (/^\s*syntax\s+["']?([^"'\s]+)["']?\s*(.*)/) {
+            my $syntax_name = $1;
             my $ext_str = $2;
+            my @extensions;
             while ($ext_str =~ /"((?:[^"\\]|\\.)*)"|(\S+)/g) {
                 push @extensions, $1 // $2;
             }
-            last;
-        } elsif (/^\s*syntax\s+["']?([^"'\s]+)["']?\s*$/) {
-            $syntax_name = $1;
-            last;
-        }
-    }
-    close($fh);
-    
-    if ($forced_syntax && $syntax_name eq $forced_syntax) {
-        $selected_syntax = { name => $syntax_name, file => "$nanorc_dir/$rc_file" };
-        last;
-    } elsif (!$forced_syntax && $syntax_name && $target_basename) {
-        foreach my $ext_re (@extensions) {
-            my $re = $ext_re;
-            $re =~ s/\\</\\b/g;
-            $re =~ s/\\>/\\b/g;
-            if ($target_basename =~ /$re/) {
-                $selected_syntax = { name => $syntax_name, file => "$nanorc_dir/$rc_file" };
+            
+            $current_syntax = { name => $syntax_name, file => "$nanorc_dir/$rc_file", extensions => \@extensions, headers => [] };
+            
+            if ($forced_syntax && $syntax_name eq $forced_syntax) {
+                $selected_syntax = $current_syntax;
                 last;
             }
+        } elsif (/^\s*header\s+(.*)/ && $current_syntax) {
+            my $header_str = $1;
+            while ($header_str =~ /"((?:[^"\\]|\\.)*)"|(\S+)/g) {
+                push @{$current_syntax->{headers}}, $1 // $2;
+            }
         }
+        
+        # If we have a current syntax and we're not forcing, check if it matches
+        if (!$forced_syntax && $current_syntax) {
+            if ($target_path) {
+                foreach my $ext_re (@{$current_syntax->{extensions}}) {
+                    my $re = $ext_re;
+                    $re =~ s/\\</\\b/g;
+                    $re =~ s/\\>/\\b/g;
+                    if ($target_path =~ /$re/) {
+                        $selected_syntax = $current_syntax;
+                        last;
+                    }
+                }
+            }
+            if (!$selected_syntax && $first_line) {
+                foreach my $header_re (@{$current_syntax->{headers}}) {
+                    my $re = $header_re;
+                    $re =~ s/\\</\\b/g;
+                    $re =~ s/\\>/\\b/g;
+                    if ($first_line =~ /$re/) {
+                        $selected_syntax = $current_syntax;
+                        last;
+                    }
+                }
+            }
+        }
+        last if $selected_syntax;
     }
+    close($fh);
     last if $selected_syntax;
 }
 
