@@ -1,0 +1,22 @@
+/*******************************************************************
+ * File:        main
+ * Purpose:     NanoColour command line tool
+ * Author:      YOUR NAME
+ ******************************************************************/
+
+#include <stdlib.h>
+#include <stdio.h>
+
+#include "RegEx/regex.h"
+
+#include "VersionNum"
+
+#include "main.h"
+
+int main(int argc, char *argv[])
+{
+    printf("NanoColour " Module_FullVersionAndDate "\n");
+    printf("Syntax: *NanoColour\n");
+
+    exit(EXIT_SUCCESS);
+}
