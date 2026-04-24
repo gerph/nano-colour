@@ -1,0 +1,41 @@
+syntax "git-commit" "/git-rebase-todo$"
+comment "#"
+
+## We use cyan for the things that are relevant to the commit
+## in progress.
+
+# Comments (the section that git includes)
+color green "^#.*"
+
+# The commit id (messages are in 'normal')
+color cyan "^(edit|fixup|pick|reword|squash|drop|[efprsd]) [a-f0-9]+"
+
+# Commands and labels are distinct from the comment ids and messages
+color cyan "^(exec|label|reset|[xlt]) .*"
+
+# Merge has a more complex line
+color cyan "^(merge|m) (-[Cc] [a-f0-9]+ )?[^ ]+"
+
+# The operations to perform
+#  - green for additions
+#  - yellow for edits
+#  - red for deletions
+#  - magenta for control operations
+color brightgreen   "^(pick|p)\>"
+color brightyellow  "^(edit|reword|e|r)\>"
+color brightmagenta "^(exec|reset|merge|x|t|m)\>"
+color brightred     "^(drop|d)\>"
+color magenta       "^(break|label|b|l)\>"
+color yellow        "^(squash|fixup|s|f)\>"
+
+
+# The comment that says what we're doing
+color cyan    "^# Rebase [a-f0-9]+\.\.[a-f0-9]+ onto [a-f0-9]+ \([1-9][0-9]* commands?"
+color green   "^# Rebase [a-f0-9]+\.\.[a-f0-9]+ onto [a-f0-9]+ \("
+color cyan    "^# Rebase [a-f0-9]+\.\.[a-f0-9]+ onto [a-f0-9]+"
+color green   "^# Rebase [a-f0-9]+\.\.[a-f0-9]+ onto "
+color cyan    "^# Rebase [a-f0-9]+\.\.[a-f0-9]+"
+color magenta "^# Rebase"
+
+# Reset any leading command
+color green   "^# "

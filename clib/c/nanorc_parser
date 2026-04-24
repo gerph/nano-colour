@@ -9,17 +9,12 @@
 #include <string.h>
 #include <ctype.h>
 
+#ifdef FORTIFY
+#include "Fortify/fortify.h"
+#endif
+
 #include "nanocolour.h"
 #include "nanorc_internal.h"
-
-/* Comment out to disable debug */
-//#define DEBUG
-
-#ifdef DEBUG
-#define dprintf if (1) printf
-#else
-#define dprintf if (0) printf
-#endif
 
 int my_strcasecmp(const char *s1, const char *s2) {
     while (*s1 && (tolower(*s1) == tolower(*s2))) {
@@ -69,6 +64,8 @@ static Style parse_style(const char *colors_str) {
     s.bright = 0;
 
     buf = my_strdup(colors_str);
+    if (!buf) return s;
+
     comma = strchr(buf, ',');
     fg = buf;
 
@@ -122,6 +119,7 @@ static char *extract_quoted(char **ptr) {
         *ptr = s;
     }
     res = my_strdup(start);
+    if (!res) return NULL;
     d = res;
     src = res;
     while (*src) {
@@ -135,33 +133,27 @@ static char *extract_quoted(char **ptr) {
 }
 
 static char *fix_regex(char *re) {
-    char *new_re = malloc(strlen(re) * 7 + 1);
-    char *d = new_re;
-    char *s = re;
-    while (*s) {
-        if (*s == '\\' && *(s+1) == '<') {
-            *d++ = '['; *d++ = '['; *d++ = ':'; *d++ = '<'; *d++ = ':'; *d++ = ']'; *d++ = ']';
-            s += 2;
-        } else if (*s == '\\' && *(s+1) == '>') {
-            *d++ = '['; *d++ = '['; *d++ = ':'; *d++ = '>'; *d++ = ':'; *d++ = ']'; *d++ = ']';
-            s += 2;
-        } else {
-            *d++ = *s++;
-        }
-    }
-    *d = '\0';
-    free(re);
-    return new_re;
+    /* Currently dummy as per user fix, but still handles allocation */
+    return re;
 }
 
-Syntax *nanocolour_parse_rc(const char *filename) {
+NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
     FILE *f = fopen(filename, "r");
     SyntaxInternal *si;
     char line[4096];
+    NanoStatus status = NANO_OK;
 
-    if (!f) return NULL;
+    if (!syntax_out) return NANO_ERROR_INVALID_ARG;
+    *syntax_out = NULL;
+
+    if (!f) return NANO_ERROR_FILE;
 
     si = calloc(1, sizeof(SyntaxInternal));
+    if (!si) {
+        fclose(f);
+        return NANO_ERROR_NOMEM;
+    }
+
     while (fgets(line, sizeof(line), f)) {
         char *p = line;
         while (*p && isspace(*p)) p++;
@@ -169,7 +161,9 @@ Syntax *nanocolour_parse_rc(const char *filename) {
 
         if (strncmp(p, "syntax", 6) == 0 && isspace(p[6])) {
             p += 7;
+            free(si->name);
             si->name = extract_quoted(&p);
+            if (!si->name) { status = NANO_ERROR_NOMEM; break; }
         } else if ((strncmp(p, "color", 5) == 0 && isspace(p[5])) ||
                    (strncmp(p, "icolor", 6) == 0 && isspace(p[6]))) {
             int icase = (*p == 'i');
@@ -191,6 +185,7 @@ Syntax *nanocolour_parse_rc(const char *filename) {
                 p += 6;
                 {
                     char *start_re = extract_quoted(&p);
+                    if (!start_re) { status = NANO_ERROR_NOMEM; break; }
                     while (*p && isspace(*p)) p++;
                     if (strncmp(p, "end=", 4) == 0) {
                         p += 4;
@@ -198,32 +193,41 @@ Syntax *nanocolour_parse_rc(const char *filename) {
                             char *end_re = extract_quoted(&p);
                             char *f_start, *f_end;
                             SyntaxRuleInternal *r;
+                            SyntaxRuleInternal *new_rules;
                             
-                            si->rules = realloc(si->rules, (si->rule_count + 1) * sizeof(SyntaxRuleInternal));
-                            r = &si->rules[si->rule_count++];
+                            if (!end_re) { free(start_re); status = NANO_ERROR_NOMEM; break; }
+                            
+                            new_rules = realloc(si->rules, (si->rule_count + 1) * sizeof(SyntaxRuleInternal));
+                            if (!new_rules) { free(start_re); free(end_re); status = NANO_ERROR_NOMEM; break; }
+                            si->rules = new_rules;
+                            r = &si->rules[si->rule_count];
                             r->type = RULE_MULTI;
                             r->style = style;
                             r->icase = icase;
                             
                             f_start = fix_regex(start_re);
                             f_end = fix_regex(end_re);
+                            
                             {
                                 int err;
-                                char errbuf[256];
                                 err = regcomp(&r->re_start, f_start, REG_EXTENDED | (icase ? REG_ICASE : 0));
                                 if (err) {
-                                    regerror(err, &r->re_start, errbuf, sizeof(errbuf));
-                                    dprintf("regcomp start failed for '%s': %s\n", f_start, errbuf);
+                                    free(f_start); free(f_end);
+                                    status = NANO_ERROR_REGEX; break;
                                 }
                                 err = regcomp(&r->re_end, f_end, REG_EXTENDED | (icase ? REG_ICASE : 0));
                                 if (err) {
-                                    regerror(err, &r->re_end, errbuf, sizeof(errbuf));
-                                    dprintf("regcomp end failed for '%s': %s\n", f_end, errbuf);
+                                    regfree(&r->re_start);
+                                    free(f_start); free(f_end);
+                                    status = NANO_ERROR_REGEX; break;
                                 }
                             }
                             free(f_start);
                             free(f_end);
+                            si->rule_count++;
                         }
+                    } else {
+                        free(start_re);
                     }
                 }
             } else {
@@ -232,11 +236,16 @@ Syntax *nanocolour_parse_rc(const char *filename) {
                     while (*p && isspace(*p)) p++;
                     if (!*p) break;
                     re = extract_quoted(&p);
-                    if (re && *re) {
+                    if (!re) { status = NANO_ERROR_NOMEM; break; }
+                    if (*re) {
                         char *f_re;
                         SyntaxRuleInternal *r;
-                        si->rules = realloc(si->rules, (si->rule_count + 1) * sizeof(SyntaxRuleInternal));
-                        r = &si->rules[si->rule_count++];
+                        SyntaxRuleInternal *new_rules;
+                        
+                        new_rules = realloc(si->rules, (si->rule_count + 1) * sizeof(SyntaxRuleInternal));
+                        if (!new_rules) { free(re); status = NANO_ERROR_NOMEM; break; }
+                        si->rules = new_rules;
+                        r = &si->rules[si->rule_count];
                         r->type = RULE_SINGLE;
                         r->style = style;
                         r->icase = icase;
@@ -244,23 +253,29 @@ Syntax *nanocolour_parse_rc(const char *filename) {
                         f_re = fix_regex(re);
                         {
                             int err;
-                            char errbuf[256];
                             err = regcomp(&r->re_start, f_re, REG_EXTENDED | (icase ? REG_ICASE : 0));
                             if (err) {
-                                regerror(err, &r->re_start, errbuf, sizeof(errbuf));
-                                dprintf("regcomp failed for '%s': %s\n", f_re, errbuf);
+                                free(f_re);
+                                status = NANO_ERROR_REGEX; break;
                             }
                         }
                         free(f_re);
+                        si->rule_count++;
                     } else {
                         free(re);
                     }
                 }
+                if (status != NANO_OK) break;
             }
         }
     }
     fclose(f);
-    return (Syntax *)si;
+    if (status != NANO_OK) {
+        nanocolour_free_syntax((Syntax *)si);
+        return status;
+    }
+    *syntax_out = (Syntax *)si;
+    return NANO_OK;
 }
 
 void nanocolour_free_syntax(Syntax *syntax) {

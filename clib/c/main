@@ -8,17 +8,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef FORTIFY
+#include "Fortify/fortify.h"
+#endif
+
 #include "nanocolour.h"
 #include "VersionNum"
-
-/* Comment out to disable debug */
-//#define DEBUG
-
-#ifdef DEBUG
-#define dprintf if (1) printf
-#else
-#define dprintf if (0) printf
-#endif
 
 void testrender(const char *target_file, const char *nanorc_file);
 
@@ -37,30 +32,42 @@ static const char *colour_to_name(Colour c) {
     }
 }
 
+static const char *status_to_string(NanoStatus status) {
+    switch (status) {
+        case NANO_OK: return "Success";
+        case NANO_ERROR_NOMEM: return "Out of memory";
+        case NANO_ERROR_FILE: return "File error";
+        case NANO_ERROR_REGEX: return "Regex error";
+        case NANO_ERROR_INVALID_ARG: return "Invalid argument";
+        default: return "Unknown error";
+    }
+}
+
 static void decode_and_print(const char *target_file, const char *nanorc_file)
 {
-    Syntax *syntax;
+    Syntax *syntax = NULL;
     size_t length;
-    char *contents;
-    ColouredFile *cf;
+    char *contents = NULL;
+    ColouredFile *cf = NULL;
     size_t i;
+    NanoStatus status;
 
-    syntax = nanocolour_parse_rc(nanorc_file);
-    if (!syntax) {
-        fprintf(stderr, "Failed to parse nanorc file: %s\n", nanorc_file);
+    status = nanocolour_parse_rc(nanorc_file, &syntax);
+    if (status != NANO_OK) {
+        fprintf(stderr, "Failed to parse nanorc file '%s': %s\n", nanorc_file, status_to_string(status));
         return;
     }
 
-    contents = nanocolour_read_file(target_file, &length);
-    if (!contents) {
-        fprintf(stderr, "Failed to read target file: %s\n", target_file);
+    status = nanocolour_read_file(target_file, &contents, &length);
+    if (status != NANO_OK) {
+        fprintf(stderr, "Failed to read target file '%s': %s\n", target_file, status_to_string(status));
         nanocolour_free_syntax(syntax);
         return;
     }
 
-    cf = nanocolour_colour_file(contents, length, syntax);
-    if (!cf) {
-        fprintf(stderr, "Failed to colour file: %s\n", target_file);
+    status = nanocolour_colour_file(contents, length, syntax, &cf);
+    if (status != NANO_OK) {
+        fprintf(stderr, "Failed to colour file '%s': %s\n", target_file, status_to_string(status));
         free(contents);
         nanocolour_free_syntax(syntax);
         return;
@@ -94,10 +101,17 @@ static void decode_and_print(const char *target_file, const char *nanorc_file)
 
 int main(int argc, char *argv[])
 {
+#ifdef FORTIFY
+    Fortify_EnterScope();
+#endif
+
     if (argc < 4) {
         printf("NanoColour " Module_FullVersionAndDate "\n");
         printf("Syntax: *NanoColour -decode <file> <nanorc>\n");
         printf("        *NanoColour -draw <file> <nanorc>\n");
+#ifdef FORTIFY
+        Fortify_LeaveScope();
+#endif
         return EXIT_FAILURE;
     }
 
@@ -107,8 +121,16 @@ int main(int argc, char *argv[])
         testrender(argv[2], argv[3]);
     } else {
         fprintf(stderr, "Unknown option: %s\n", argv[1]);
+#ifdef FORTIFY
+        Fortify_LeaveScope();
+#endif
         return EXIT_FAILURE;
     }
+
+#ifdef FORTIFY
+    Fortify_LeaveScope();
+    Fortify_OutputStatistics();
+#endif
 
     return EXIT_SUCCESS;
 }

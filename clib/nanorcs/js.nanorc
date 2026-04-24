@@ -1,0 +1,40 @@
+syntax "JavaScript" "\.(js|ts)$"
+header "^#!.*\/(env +)node"
+comment "//"
+
+## Default
+color white "^.+$"
+
+## Decimal, octal and hexadecimal numbers
+color green "\<[-+]?([1-9][0-9]*|0[0-7]*|0x[0-9a-fA-F]+)([uU][lL]?|[lL][uU]?)?\>"
+
+## Floating point number with at least one digit before decimal point
+color cyan "\<[-+]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+)([EePp][+-]?[0-9]+)?[fFlL]?"
+color cyan "\<[-+]?([0-9]+[EePp][+-]?[0-9]+)[fFlL]?"
+
+## Keywords
+color yellow "\<(break|case|catch|continue|default|delete|do|else|finally)\>"
+color yellow "\<(for|function|if|in|instanceof|new|null|return|switch)\>"
+color yellow "\<(switch|this|throw|try|typeof|undefined|var|void|while|with)\>"
+color yellow "\<(import|as|from|export)\>"
+color yellow "\<(const|let|class|extends|of|get|set|await|async|yield)\>"
+
+## Type specifiers
+color brightblue "\<(Array|Boolean|Date|Enumerator|Error|Function|Math)\>"
+color brightblue "\<(WeakMap|Map|WeakSet|Set|Symbol|Promise)\>"
+color brightblue "\<(Number|Object|RegExp|String)\>"
+color brightblue "\<(true|false)\>"
+
+## String
+color brightyellow "L?\"(\\"|[^"])*\""
+color brightgreen "L?'(\'|[^'])*'"
+
+## Trailing spaces
+color ,red "[[:space:]]+$"
+
+## Escapes
+color magenta "\\[0-7][0-7]?[0-7]?|\\x[0-9a-fA-F]+|\\[bfnrt'"\?\\]"
+
+## Comments
+color green "^\s*//.*$"
+color green start="^\s*/\*" end="\*/"

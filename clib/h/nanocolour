@@ -10,6 +10,14 @@
 #include <stddef.h>
 
 typedef enum {
+    NANO_OK = 0,
+    NANO_ERROR_NOMEM,
+    NANO_ERROR_FILE,
+    NANO_ERROR_REGEX,
+    NANO_ERROR_INVALID_ARG
+} NanoStatus;
+
+typedef enum {
     COLOUR_BLACK = 0,
     COLOUR_RED = 1,
     COLOUR_GREEN = 2,
@@ -52,19 +60,7 @@ typedef enum {
     RULE_MULTI
 } RuleType;
 
-typedef struct {
-    RuleType type;
-    char *re_start;
-    char *re_end;
-    Style style;
-    int icase;
-} SyntaxRule;
-
-typedef struct {
-    char *name;
-    size_t rule_count;
-    SyntaxRule *rules;
-} Syntax;
+typedef struct Syntax_s Syntax;
 
 /* Function prototypes */
 
@@ -72,21 +68,18 @@ typedef struct {
  * Reads a file into a single memory block.
  * The returned pointer must be freed by the caller.
  */
-char *nanocolour_read_file(const char *filename, size_t *length);
+NanoStatus nanocolour_read_file(const char *filename, char **contents_out, size_t *length_out);
 
 /**
  * Parses a single nanorc file into a Syntax structure.
  * Includes are ignored.
  */
-Syntax *nanocolour_parse_rc(const char *filename);
+NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out);
 
 /**
  * Colours a file content using the provided syntax rules.
- * The contents are assumed to be owned by the caller or will be copied?
- * The structure requirements say "pointer to the file contents in memory", 
- * so it should probably point to the memory block read.
  */
-ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax *syntax);
+NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *syntax, ColouredFile **file_out);
 
 /**
  * Frees a Syntax structure.
