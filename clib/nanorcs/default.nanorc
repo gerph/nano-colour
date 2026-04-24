@@ -1,0 +1,11 @@
+syntax "default"
+comment "#"
+
+# Comments.
+color green "^#.*"
+
+# Spaces in front of tabs.
+color ,red " +	+"
+
+# Email addresses.
+color yellow "<[[:alnum:].%_+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}>"

@@ -8,16 +8,11 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "nanocolour_render.h"
-
-/* Comment out to disable debug */
-//#define DEBUG
-
-#ifdef DEBUG
-#define dprintf if (1) printf
-#else
-#define dprintf if (0) printf
+#ifdef FORTIFY
+#include "Fortify/fortify.h"
 #endif
+
+#include "nanocolour_render.h"
 
 typedef struct {
     int32_t y_offset; /* relative to top, positive downwards */
@@ -50,15 +45,19 @@ static colour_t map_colour(Colour c, int bright) {
     }
 }
 
-static void calculate_sizes(NanoRender *r) {
+static bool calculate_sizes(NanoRender *r) {
     size_t i;
     int32_t cur_y = 0;
     int32_t max_w = 0;
     bounds_t em;
+    LineRenderInfo *new_info;
 
-    if (r->size_valid) return;
+    if (r->size_valid) return true;
     
-    r->line_info = realloc(r->line_info, r->file->line_count * sizeof(LineRenderInfo));
+    new_info = realloc(r->line_info, r->file->line_count * sizeof(LineRenderInfo));
+    if (!new_info) return false;
+    r->line_info = new_info;
+
     em = r->gc->text_getemsize(r->gc, r->font);
     
     for (i = 0; i < r->file->line_count; i++) {
@@ -90,15 +89,21 @@ static void calculate_sizes(NanoRender *r) {
     r->total_bounds.width = max_w;
     r->total_bounds.height = cur_y;
     r->size_valid = true;
+    return true;
 }
 
 NanoRender *nanocolour_render_create(const ColouredFile *file, gcontext_t *gc, font_t font) {
-    NanoRender *r = calloc(1, sizeof(NanoRender));
+    NanoRender *r;
+    if (!file || !gc) return NULL;
+    r = calloc(1, sizeof(NanoRender));
     if (r) {
         r->file = file;
         r->gc = gc;
         r->font = font;
-        calculate_sizes(r);
+        if (!calculate_sizes(r)) {
+            free(r);
+            return NULL;
+        }
     }
     return r;
 }
@@ -112,7 +117,11 @@ void nanocolour_render_free(NanoRender *render) {
 
 void nanocolour_render_get_size(NanoRender *render, bounds_t *bounds) {
     if (render && bounds) {
-        calculate_sizes(render);
+        if (!calculate_sizes(render)) {
+            bounds->width = 0;
+            bounds->height = 0;
+            return;
+        }
         *bounds = render->total_bounds;
     }
 }
@@ -120,7 +129,7 @@ void nanocolour_render_get_size(NanoRender *render, bounds_t *bounds) {
 void nanocolour_render_draw(NanoRender *render, int x, int y, colour_t bg_colour, colour_t fg_colour, const bbox_t *clip) {
     size_t i;
     if (!render) return;
-    calculate_sizes(render);
+    if (!calculate_sizes(render)) return;
 
     if (bg_colour != COLOUR_NONE) {
         render->gc->rectangle_fill(render->gc, bg_colour, 
@@ -136,7 +145,6 @@ void nanocolour_render_draw(NanoRender *render, int x, int y, colour_t bg_colour
         int32_t cur_x = x;
         size_t j;
 
-        /* Clipping check */
         if (clip) {
             if (line_top < clip->y0 || line_bottom > clip->y1) continue;
         }
@@ -146,7 +154,6 @@ void nanocolour_render_draw(NanoRender *render, int x, int y, colour_t bg_colour
             colour_t fg = (el->style.fg == COLOUR_NORMAL) ? fg_colour : map_colour(el->style.fg, el->style.bright);
             colour_t bg = (el->style.bg == COLOUR_NORMAL) ? COLOUR_NONE : map_colour(el->style.bg, 0);
             
-            /* GContext text_paint takes xb, yb (baseline) */
             render->gc->text_paint(render->gc, render->font, 
                                    cur_x, line_top - info->ascent,
                                    bg, fg, 
@@ -166,6 +173,7 @@ void nanocolour_render_set_font(NanoRender *render, font_t font) {
     if (render) {
         render->font = font;
         render->size_valid = false;
+        /* Failure of calculate_sizes here just means size_valid remains false */
         calculate_sizes(render);
     }
 }

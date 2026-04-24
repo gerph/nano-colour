@@ -1,0 +1,41 @@
+syntax "Makefile" "(^|/)(([Mm]akefile|\.ma?k)(,fe1)?|[^/]+\.Makefile)$"
+header "^#!.*/(env +)?[bg]?make( |$)"
+comment "#"
+
+# Directives
+color cyan  "\<(ifeq|ifdef|ifneq|ifndef|else|endif)\>"
+color cyan  "^(export|include|override)\>"
+
+# Targets
+color brightmagenta  "^[^:= 	]+:"
+color brightmagenta  "^[^:+ 	]+\+"
+
+# Assignments
+color yellow "^[A-Za-z][A-Za-z0-9_]+ *[+:?]?="
+color brightblue "[=,%]" "\+=|\?=|:=|&&|\|\|"
+
+# Functions
+color cyan "\$\((abspath|addprefix|addsuffix|and|basename|call|dir)[[:space:]]"
+color cyan "\$\((error|eval|filter|filter-out|findstring|firstword)[[:space:]]"
+color cyan "\$\((flavor|foreach|if|info|join|lastword|notdir|or)[[:space:]]"
+color cyan "\$\((origin|patsubst|realpath|shell|sort|strip|suffix)[[:space:]]"
+color cyan "\$\((value|warning|wildcard|word|wordlist|words)[[:space:]]"
+
+# Brackets and bare dollar?
+color cyan "[()$]"
+
+# String
+color yellow ""(\\.|[^"])*"|'(\\.|[^'])*'"
+
+# Variables
+color brightyellow "\$+(\{[^} ]+\}|\([^) ]+\))"
+color brightyellow "\$[@^<*?%|+]|\$\([@^<*?%+-][DF]\)"
+
+# Escape
+color magenta   "\$\$|\\.?"
+
+# Comments
+color green "(^|[[:space:]])#([^{].*)?$"
+
+# Show trailing whitespace
+color ,red "[[:space:]]+$"

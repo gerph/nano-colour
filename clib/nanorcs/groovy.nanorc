@@ -1,0 +1,35 @@
+syntax "groovy" "(\.(groovy|gradle|jenkinsfile))|(^|/)Jenkinsfile$"
+comment "// "
+
+## Function declarations
+color brightblue "^ *class +[A-Za-z_][0-9A-Za-z_]*"
+color brightblue "^ *def +[A-Za-z_][0-9A-Za-z_]*\("
+
+## Keywords
+color brightcyan "\<(boolean|byte|char|double|enum|float|int|long|new|short|super|this|transient)\>"
+color brightcyan "\<(as|assert|break|case|catch|continue|default|do|else|finally|for|goto|if|in|return|switch|throw|try|while)\>"
+color brightcyan "\<(abstract|class|extends|implements|import|interface|native|package|private|protected|public|static|strictfp|synchronized|throws|trait|void|volatile)\>"
+color brightcyan "\<(const|def|final|instanceof)\>"
+color brightcyan "\<(true|false|null)\>"
+
+## Strings
+color yellow ""(\\.|[^"])*"" "'(\\.|[^'])*'"
+## (Because of the limitations of Nano's colouring system, these rules won't colour
+##  the way that it finds the first match of the start sequence in order to highlight
+##  regions; the 'def|class|...' check is just to stop the quotes from colouring the
+##  entire file)
+color yellow start=""""([^"]|$)" end=""""|^( *def|class)"
+color yellow start="'''([^']|$)" end="'''|^( *def|class)"
+
+
+## Interpolation
+color cyan "\$\{[^\}]*}"
+
+## Comments
+color green "^//.*"
+color green "\s//.*"
+color green start="^/\*(\*)?" end="\*/"
+color green start="\s/\*(\*)?" end="\*/"
+
+## Trailing whitespace
+color ,red "[[:space:]]+$"

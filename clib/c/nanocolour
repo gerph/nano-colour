@@ -8,47 +8,63 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef FORTIFY
+#include "Fortify/fortify.h"
+#endif
+
 #include "nanocolour.h"
 #include "nanorc_internal.h"
 
-/* Comment out to disable debug */
-//#define DEBUG
-
-#ifdef DEBUG
-#define dprintf if (1) printf
-#else
-#define dprintf if (0) printf
-#endif
-
-char *nanocolour_read_file(const char *filename, size_t *length) {
+NanoStatus nanocolour_read_file(const char *filename, char **contents_out, size_t *length_out) {
     FILE *f = fopen(filename, "rb");
     char *buf;
-    if (!f) return NULL;
+    size_t length;
+
+    if (!contents_out || !length_out) return NANO_ERROR_INVALID_ARG;
+    *contents_out = NULL;
+    *length_out = 0;
+
+    if (!f) return NANO_ERROR_FILE;
     fseek(f, 0, SEEK_END);
-    *length = (size_t)ftell(f);
+    length = (size_t)ftell(f);
     fseek(f, 0, SEEK_SET);
-    buf = malloc(*length + 1);
-    if (buf) {
-        fread(buf, 1, *length, f);
-        buf[*length] = '\0';
+    buf = malloc(length + 1);
+    if (!buf) {
+        fclose(f);
+        return NANO_ERROR_NOMEM;
     }
+    if (fread(buf, 1, length, f) != length) {
+        free(buf);
+        fclose(f);
+        return NANO_ERROR_FILE;
+    }
+    buf[length] = '\0';
     fclose(f);
-    return buf;
+    *contents_out = buf;
+    *length_out = length;
+    return NANO_OK;
 }
 
-ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax *syntax) {
+NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *syntax, ColouredFile **file_out) {
     SyntaxInternal *si = (SyntaxInternal *)syntax;
-    ColouredFile *cf = calloc(1, sizeof(ColouredFile));
+    ColouredFile *cf;
     size_t line_count = 0;
     size_t i;
-    char **line_ptrs;
-    size_t *line_lens;
+    char **line_ptrs = NULL;
+    size_t *line_lens = NULL;
     size_t cur_line = 0;
     char *p;
     char *end;
     SyntaxRuleInternal *current_multi_rule = NULL;
     Style default_style;
     size_t l;
+    NanoStatus status = NANO_OK;
+
+    if (!file_out || !syntax) return NANO_ERROR_INVALID_ARG;
+    *file_out = NULL;
+
+    cf = calloc(1, sizeof(ColouredFile));
+    if (!cf) return NANO_ERROR_NOMEM;
 
     cf->contents = contents;
     cf->length = length;
@@ -62,9 +78,11 @@ ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax
     if (length > 0 && contents[length-1] != '\n') line_count++;
     cf->line_count = line_count;
     cf->lines = calloc(line_count, sizeof(ColouredLine));
+    if (!cf->lines) { status = NANO_ERROR_NOMEM; goto error; }
 
     line_ptrs = malloc(line_count * sizeof(char *));
     line_lens = malloc(line_count * sizeof(size_t));
+    if (!line_ptrs || !line_lens) { status = NANO_ERROR_NOMEM; goto error; }
     
     p = contents;
     end = contents + length;
@@ -89,6 +107,11 @@ ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax
         Style *styles = malloc(len * sizeof(Style));
         size_t r_idx;
 
+        if (!line_text || !styles) {
+            free(line_text); free(styles);
+            status = NANO_ERROR_NOMEM; goto error;
+        }
+
         memcpy(line_text, line_ptrs[l], len);
         line_text[len] = '\0';
 
@@ -111,14 +134,12 @@ ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax
                 while (regexec(&rule->re_start, line_text + offset, 1, &pmatch, 0) == 0) {
                     int start = offset + (int)pmatch.rm_so;
                     int end_m = offset + (int)pmatch.rm_eo;
-                    dprintf("Line %d match rule %d at %d-%d\n", (int)l+1, (int)r_idx, start, end_m); fflush(stdout);
                     for (i = (size_t)start; i < (size_t)end_m; i++) styles[i] = rule->style;
                     if (pmatch.rm_so == pmatch.rm_eo) offset++;
                     else offset = end_m;
                     if (offset >= (int)len) break;
                 }
             } else {
-
                 regmatch_t pmatch_s;
                 int offset = 0;
                 while (regexec(&rule->re_start, line_text + offset, 1, &pmatch_s, 0) == 0) {
@@ -152,6 +173,10 @@ ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax
             }
             cf->lines[l].element_count = elem_count;
             cf->lines[l].elements = calloc(elem_count, sizeof(ColouredElement));
+            if (!cf->lines[l].elements) {
+                free(line_text); free(styles);
+                status = NANO_ERROR_NOMEM; goto error;
+            }
             {
                 size_t e = 0;
                 for (i = 0; i < len; i++) {
@@ -175,15 +200,24 @@ ColouredFile *nanocolour_colour_file(char *contents, size_t length, const Syntax
 
     free(line_ptrs);
     free(line_lens);
-    return cf;
+    *file_out = cf;
+    return NANO_OK;
+
+error:
+    free(line_ptrs);
+    free(line_lens);
+    nanocolour_free_coloured_file(cf);
+    return status;
 }
 
 void nanocolour_free_coloured_file(ColouredFile *file) {
     size_t i;
     if (!file) return;
-    for (i = 0; i < file->line_count; i++) {
-        free(file->lines[i].elements);
+    if (file->lines) {
+        for (i = 0; i < file->line_count; i++) {
+            free(file->lines[i].elements);
+        }
+        free(file->lines);
     }
-    free(file->lines);
     free(file);
 }

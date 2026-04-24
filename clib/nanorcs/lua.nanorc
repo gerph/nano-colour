@@ -1,0 +1,81 @@
+##############################################################################
+#
+# Lua syntax highlighting for Nano.
+#
+# Author:  Matthew Wild <mwild1 (at) gmail.com>
+# License: GPL 2  or later
+#
+# Version: 2007-06-06
+#
+# Notes: Originally based on Ruby syntax rc by Josef 'Jupp' Schugt
+##############################################################################
+
+# Modified by Gerph.
+
+# Automatically use for '.lua' files, and the RISC OS filetyped files.
+syntax "Lua" ".lua|,18c|,18d$"
+magic "Lua script"
+comment "--"
+
+linter luacheck --no-color
+
+# General
+color brightwhite ".+"
+
+# Operators
+color brightyellow ":|\*\*|\*|/|%|\+|-|\^|>|>=|<|<=|~=|=|\.\.|\<(not|and|or)\>"
+
+# Statements
+color brightblue "\<(do|end|while|repeat|until|if|elseif|then|else|for|in|function|local|return)\>"
+
+# Keywords
+color brightcyan "\<(debug|string|math|table|io|coroutine|os|utf8|bit32)\>\."
+color brightcyan "\<(_ENV|_G|_VERSION|assert|collectgarbage|dofile|error|getfenv|getmetatable|ipairs|load|loadfile|module|next|pairs|pcall|print|rawequal|rawget|rawlen|rawset|require|select|setfenv|setmetatable|tonumber|tostring|type|unpack|xpcall)\s*\("
+
+# Standard library
+color brightcyan "io\.\<(close|flush|input|lines|open|output|popen|read|tmpfile|type|write)\>"
+color brightcyan "math\.\<(abs|acos|asin|atan2|atan|ceil|cosh|cos|deg|exp|floor|fmod|frexp|huge|ldexp|log10|log|max|maxinteger|min|mininteger|modf|pi|pow|rad|random|randomseed|sinh|sqrt|tan|tointeger|type|ult)\>"
+color brightcyan "os\.\<(clock|date|difftime|execute|exit|getenv|remove|rename|setlocale|time|tmpname)\>"
+color brightcyan "package\.\<(config|cpath|loaded|loadlib|path|preload|seeall|searchers|searchpath)\>"
+color brightcyan "string\.\<(byte|char|dump|find|format|gmatch|gsub|len|lower|match|pack|packsize|rep|reverse|sub|unpack|upper)\>"
+color brightcyan "table\.\<(concat|insert|maxn|move|pack|remove|sort|unpack)\>"
+color brightcyan "utf8\.\<(char|charpattern|codes|codepoint|len|offset)\>"
+color brightcyan "coroutine\.\<(create|isyieldable|resume|running|status|wrap|yield)\>"
+color brightcyan "debug\.\<(debug|getfenv|gethook|getinfo|getlocal|getmetatable|getregistry|getupvalue|getuservalue|setfenv|sethook|setlocal|setmetatable|setupvalue|setuservalue|traceback|upvalueid|upvaluejoin)\>"
+color brightcyan "bit32\.\<(arshift|band|bnot|bor|btest|bxor|extract|replace|lrotate|lshift|rrotate|rshift)\>"
+
+# File handle methods
+color brightcyan "\:\<(close|flush|lines|read|seek|setvbuf|write)\>"
+
+# false, nil, true
+color brightmagenta "\<(false|nil|true)\>"
+
+# External files
+color yellow "(\<(dofile|require|include)|%q|%!|%Q|%r|%x)\>"
+
+# Numbers
+color red "\<([0-9]+)\>"
+
+# Symbols
+color brightmagenta "(\(|\)|\[|\]|\{|\})"
+
+# Strings
+color brightyellow "\"(\\.|[^\\\"])*\"|'(\\.|[^\\'])*'"
+
+# Multiline strings
+color yellow start="\s*\[\[" end="\]\]"
+
+# Escapes
+color brightyellow "\\[0-7][0-7][0-7]|\\x[0-9a-fA-F][0-9a-fA-F]|\\[abefnrs]|(\\c|\\C-|\\M-|\\M-\\C-)."
+
+# Shebang
+color brightcyan "^#!.*"
+
+# Simple comments
+color green "\-\-.*$"
+
+# Multiline comments
+color green start="\s*\-\-\s*\[\[" end="\]\]"
+
+# Trailing whitespaces
+color ,green "[[:space:]]+$"

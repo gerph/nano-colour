@@ -1,0 +1,33 @@
+## XML files
+
+syntax "XML" ".*\.([jrs]?html?|xml|xslt|sgml?|rng)$"
+header "<\?xml.*version=.*\?>"
+magic "(XML|SGML) (sub)?document"
+comment "<!--|-->"
+
+## Initially everything is white
+color white  "^.+$"
+
+## Between the tag bounds, we use magenta (so that attribute names are magenta)
+color magenta  start="<" end=">"
+
+## Tag names are in cyan
+color cyan   "<[^> ]+"
+color cyan   ">"
+
+## Doctype and comments
+color green start="<!DOCTYPE" end="[/]?>"
+color green start="<!--" end="-->"
+
+## The strings inside the tag
+color brightblue "=\"[^"]*\""
+color brightblue "='[^']*'"
+
+## The equals itself, and the tags
+color yellow "(=|<[/?]|<|[/?]>|>)"
+
+## Entities are in red
+color red    "&[^;]*;"
+
+## Trailing spaces
+color ,red   "[[:space:]]+$"

@@ -8,6 +8,11 @@
 #define NANORC_INTERNAL_H
 
 #include <stddef.h>
+
+#ifdef FORTIFY
+#include "Fortify/fortify.h"
+#endif
+
 #include "RegEx/regex.h"
 #include "nanocolour.h"
 

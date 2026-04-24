@@ -1,0 +1,37 @@
+syntax python "\.py$"
+header "^#!.*/(env +)?python[-0-9._]*( |$)"
+magic "Python script"
+linter pylint
+comment "#"
+
+## Misbalanced indentation (anything over 32 chars is ok, though, so that sequences
+## like wrapped bracketted lines don't have complaints)
+color ,red "^ +"
+color ,black "^ {32,}"
+color ,black "^(    )+"
+
+## Class declarations
+color brightblue "^ *class +[A-Za-z_][0-9A-Za-z_]*"
+
+## Function declarations
+color brightblue "^ *def +[A-Za-z_][0-9A-Za-z_]*"
+
+## Keywords
+color brightcyan "\<(and|as|assert|break|class|continue|def|del|elif|else|except|exec|finally|for|from|global|if|import|in|is|lambda|not|or|pass|print|raise|return|try|while|with|yield)\>"
+
+## Strings
+color yellow "[']([^']*[^\\])?[']" "[']{3}.*[^\\][']{3}"
+color yellow "["]([^"]*[^\\])?["]" "["]{3}.*[^\\]["]{3}"
+## (Because of the limitations of Nano's colouring system, these rules won't colour
+##  the way that it finds the first match of the start sequence in order to highlight
+##  regions; the 'def|class|...' check is just to stop the quotes from colouring the
+##  entire file)
+color brightgreen start=""""([^"]|$)" end=""""|^( *def|class|import)"
+color brightgreen start="'''([^']|$)" end="'''|^( *def|class|import)"
+
+## Comments
+color green "#.*$"
+
+## Trailing spaces (has to be applied later because of the comments running over
+## multiple lines)
+color ,red "[[:space:]]+$"
