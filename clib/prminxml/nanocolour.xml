@@ -1,0 +1,468 @@
+<?xml version="1.0"?>
+<!DOCTYPE riscos-prm PUBLIC "-//Gerph//DTD PRM documentation 1.03//EN"
+                            "http://gerph.org/dtd/103/prm.dtd">
+
+<riscos-prm>
+<chapter title="NanoColour">
+<section title="Introduction and Overview">
+<p>
+NanoColour is a module which renders syntax-coloured text from a caller-supplied memory
+buffer. It is intended for applications which need to size and draw source text or
+similarly structured files without embedding their own nanorc parser, colouriser or font
+management.
+</p>
+<p>
+The module combines three pieces of work into a single service: syntax selection,
+colour decoding, and graphical rendering. A caller opens a rendering session for a text
+buffer, optionally supplies a syntax name, configures the rendering style, requests the
+overall rendered size, and then renders the text at a chosen position.
+</p>
+<p>
+If no syntax name is supplied, the module searches the nanorc definitions in
+<sysvar>NanoRCs$Dir</sysvar> and selects the most suitable syntax automatically.
+</p>
+</section>
+
+<section title="Technical details">
+<p>
+Each open session is represented by an opaque handle returned by
+<reference type="swi" name="NanoColour_Open"/>. The handle owns the decoded text, the
+selected syntax, the cached colour information, the chosen font details and any cached
+layout information needed for efficient measurement and redraw.
+</p>
+
+<subsection title="Rendering model">
+<p>
+The module creates a single GContext during initialisation and uses it for all rendering
+operations. Callers do not supply a GContext handle. Instead, the session records the
+presentation choices which the module should apply when measuring and drawing.
+</p>
+<p>
+The module owns the font selection for each session. The caller supplies a font name and
+font size through <reference type="swi" name="NanoColour_SetStyle"/>, and the module
+creates or replaces the underlying font instance as required. Changing the font, default
+colours or text content invalidates any cached layout metrics.
+</p>
+</subsection>
+
+<subsection title="Syntax selection">
+<p>
+If the syntax pointer passed to <reference type="swi" name="NanoColour_Open"/> or
+<reference type="swi" name="NanoColour_Recolour"/> is non-zero, it names the syntax to
+be used explicitly. If the pointer is zero, the module searches the nanorc files in
+<sysvar>NanoRCs$Dir</sysvar> and auto-detects a syntax from the supplied text.
+</p>
+<p>
+Auto-detection is intended to follow the same syntax-matching rules as the NanoColour
+library: filename-style rules where available, followed by header matching against the
+start of the buffer. If no suitable syntax can be identified, the module reports an
+error rather than silently applying an arbitrary syntax.
+</p>
+</subsection>
+
+<subsection title="Measurement and rendering">
+<p>
+The session caches enough layout information that
+<reference type="swi" name="NanoColour_GetSize"/> can be called before any drawing
+takes place. This allows applications to size work areas, scroll extents or transient
+display regions before invoking <reference type="swi" name="NanoColour_Render"/>.
+</p>
+<p>
+Rendering is performed relative to the caller-supplied origin. The draw operation uses
+the session's configured colours and font. An optional clip rectangle may be supplied to
+permit callers to redraw only the region which intersects the visible area.
+</p>
+</subsection>
+
+<subsection title="Flags and handles">
+<p>
+All SWIs use R0 for flags. Reserved flag bits must be zero. Session handles returned by
+the module are opaque values and must not be interpreted by the caller.
+</p>
+</subsection>
+
+<subsection title="Provisional allocation">
+<p>
+This design uses the provisional SWI chunk base &hex;C3AC0 and the provisional error
+base &hex;9FBA00. Both values are unallocated and are recorded as placeholders pending
+formal registration.
+</p>
+</subsection>
+</section>
+
+<section title="System variables">
+<sysvar-definition name="NanoRCs$Dir"
+                   description="Directory containing nanorc syntax definition files">
+<use>
+<p>
+This variable identifies the directory searched when syntax selection is requested
+without an explicit syntax name. The directory should contain nanorc files in the format
+understood by the NanoColour library.
+</p>
+</use>
+
+<related>
+<reference type="swi" name="NanoColour_Open" />
+<reference type="swi" name="NanoColour_Recolour" />
+</related>
+</sysvar-definition>
+</section>
+
+<section title="SWI calls">
+<swi-definition name="NanoColour_Open"
+                number="C3AC0"
+                description="Creates a rendering session for a text buffer"
+                irqs="undefined"
+                fiqs="enabled"
+                processor-mode="SVC"
+                re-entrant="no">
+<entry>
+ <register-use number="0">flags:
+  <bitfield-table>
+   <bit number="0-31" state="reserved" />
+  </bitfield-table>
+ </register-use>
+ <register-use number="1">Pointer to the text buffer to be rendered</register-use>
+ <register-use number="2">Length of the text buffer in bytes</register-use>
+ <register-use number="3">Pointer to a NUL-terminated syntax name, or 0 to auto-detect from <sysvar>NanoRCs$Dir</sysvar></register-use>
+</entry>
+<exit>
+ <register-use number="0">Session handle</register-use>
+</exit>
+<use>
+<p>
+This SWI creates a new rendering session from the caller-supplied buffer. The buffer is
+treated as the text source for the session, and the session retains whatever internal
+state is required to recolour, size and render that content.
+</p>
+<p>
+If R3 is zero, the module performs syntax auto-detection using the definitions found in
+<sysvar>NanoRCs$Dir</sysvar>. If R3 is non-zero, the named syntax is used directly.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Close" />
+<reference type="swi" name="NanoColour_SetStyle" />
+<reference type="swi" name="NanoColour_GetSize" />
+</related>
+</swi-definition>
+
+<swi-definition name="NanoColour_Close"
+                number="C3AC1"
+                description="Releases a rendering session"
+                irqs="undefined"
+                fiqs="enabled"
+                processor-mode="SVC"
+                re-entrant="no">
+<entry>
+ <register-use number="0">flags:
+  <bitfield-table>
+   <bit number="0-31" state="reserved" />
+  </bitfield-table>
+ </register-use>
+ <register-use number="1">Session handle</register-use>
+</entry>
+<exit>
+ <register-use number="0-9" state="preserved" />
+</exit>
+<use>
+<p>
+This SWI destroys a session created by <reference type="swi" name="NanoColour_Open"/>
+and releases all associated state, including cached colour information, layout caches
+and module-owned font objects for the session.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Open" />
+</related>
+</swi-definition>
+
+<swi-definition name="NanoColour_SetStyle"
+                number="C3AC2"
+                description="Configures the module-owned font and default colours for a session"
+                irqs="undefined"
+                fiqs="enabled"
+                processor-mode="SVC"
+                re-entrant="no">
+<entry>
+ <register-use number="0">flags:
+  <bitfield-table>
+   <bit number="0">If set, replace the default foreground colour from R5</bit>
+   <bit number="1">If set, replace the default background colour from R6</bit>
+   <bit number="2">If set, replace the font name and size from R2-R4</bit>
+   <bit number="3-31" state="reserved" />
+  </bitfield-table>
+ </register-use>
+ <register-use number="1">Session handle</register-use>
+ <register-use number="2">Pointer to a NUL-terminated font name; ignored unless bit 2 is set</register-use>
+ <register-use number="3">Font width in sixteenths of a point; ignored unless bit 2 is set</register-use>
+ <register-use number="4">Font height in sixteenths of a point; ignored unless bit 2 is set</register-use>
+ <register-use number="5">Default foreground colour value; ignored unless bit 0 is set</register-use>
+ <register-use number="6">Default background colour value; ignored unless bit 1 is set</register-use>
+</entry>
+<exit>
+ <register-use number="0-9" state="preserved" />
+</exit>
+<use>
+<p>
+This SWI updates the presentation for an existing session. The module owns the font
+instance created from the supplied name and size, and replaces any existing session font
+when the font-select flag is set.
+</p>
+<p>
+Any change made by this SWI invalidates the cached layout metrics for the session, so
+that the next call to <reference type="swi" name="NanoColour_GetSize"/> or
+<reference type="swi" name="NanoColour_Render"/> recalculates the layout.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_GetSize" />
+<reference type="swi" name="NanoColour_Render" />
+</related>
+</swi-definition>
+
+<swi-definition name="NanoColour_GetSize"
+                number="C3AC3"
+                description="Returns the rendered bounds for a session"
+                irqs="undefined"
+                fiqs="enabled"
+                processor-mode="SVC"
+                re-entrant="no">
+<entry>
+ <register-use number="0">flags:
+  <bitfield-table>
+   <bit number="0-31" state="reserved" />
+  </bitfield-table>
+ </register-use>
+ <register-use number="1">Session handle</register-use>
+</entry>
+<exit>
+ <register-use number="0">Rendered width</register-use>
+ <register-use number="1">Rendered height</register-use>
+</exit>
+<use>
+<p>
+This SWI returns the total bounds of the rendered text for the session's current style.
+Applications should call it before drawing if they need to establish the size of a work
+area or the extent of a display region.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Render" />
+<reference type="swi" name="NanoColour_SetStyle" />
+</related>
+</swi-definition>
+
+<swi-definition name="NanoColour_Render"
+                number="C3AC4"
+                description="Renders the coloured text for a session"
+                irqs="undefined"
+                fiqs="enabled"
+                processor-mode="SVC"
+                re-entrant="no">
+<entry>
+ <register-use number="0">flags:
+  <bitfield-table>
+   <bit number="0">If set, R4 points to a clip rectangle</bit>
+   <bit number="1-31" state="reserved" />
+  </bitfield-table>
+ </register-use>
+ <register-use number="1">Session handle</register-use>
+ <register-use number="2">X coordinate of the render origin</register-use>
+ <register-use number="3">Y coordinate of the render origin</register-use>
+ <register-use number="4">Pointer to a clip rectangle, or 0 if bit 0 is clear</register-use>
+</entry>
+<exit>
+ <register-use number="0-9" state="preserved" />
+</exit>
+<use>
+<p>
+This SWI renders the current contents of the session using the module-owned GContext and
+the session's configured style. The origin identifies the top left position of the
+rendered text.
+</p>
+<p>
+If a clip rectangle is supplied, the module may reject rendering which falls wholly
+outside the rectangle and may use the rectangle to restrict redraw work.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_GetSize" />
+<reference type="swi" name="NanoColour_SetStyle" />
+</related>
+</swi-definition>
+
+<swi-definition name="NanoColour_Recolour"
+                number="C3AC5"
+                description="Replaces the session text and re-runs syntax colouring"
+                irqs="undefined"
+                fiqs="enabled"
+                processor-mode="SVC"
+                re-entrant="no">
+<entry>
+ <register-use number="0">flags:
+  <bitfield-table>
+   <bit number="0-31" state="reserved" />
+  </bitfield-table>
+ </register-use>
+ <register-use number="1">Session handle</register-use>
+ <register-use number="2">Pointer to the replacement text buffer</register-use>
+ <register-use number="3">Length of the replacement text buffer in bytes</register-use>
+ <register-use number="4">Pointer to a NUL-terminated syntax name, or 0 to auto-detect from <sysvar>NanoRCs$Dir</sysvar></register-use>
+</entry>
+<exit>
+ <register-use number="0-9" state="preserved" />
+</exit>
+<use>
+<p>
+This SWI updates an existing session with new text and re-runs the colouring stage. It
+is intended for viewers and editors which need to keep a stable handle while their text
+changes over time.
+</p>
+<p>
+Changing the text or syntax also invalidates the cached layout metrics for the session.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Open" />
+<reference type="swi" name="NanoColour_GetSize" />
+</related>
+</swi-definition>
+</section>
+
+<section title="Error messages">
+<p>
+The error numbers in this section use the provisional unallocated base &hex;9FBA00 and
+are intended to be replaced only if a different registered base is assigned during
+implementation.
+</p>
+<error-definition name="NanoColour_BadFlags"
+                  number="9FBA00"
+                  description="Reserved flag bits were non-zero">
+<use>
+<p>
+This error is reported when a SWI is called with one or more reserved bits set in R0.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Open" />
+<reference type="swi" name="NanoColour_SetStyle" />
+<reference type="swi" name="NanoColour_Render" />
+</related>
+</error-definition>
+
+<error-definition name="NanoColour_BadHandle"
+                  number="9FBA01"
+                  description="The supplied session handle is not valid">
+<use>
+<p>
+This error is reported when a SWI which operates on an existing session is passed an
+unknown or expired handle.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Close" />
+<reference type="swi" name="NanoColour_SetStyle" />
+<reference type="swi" name="NanoColour_GetSize" />
+<reference type="swi" name="NanoColour_Render" />
+<reference type="swi" name="NanoColour_Recolour" />
+</related>
+</error-definition>
+
+<error-definition name="NanoColour_BadParameter"
+                  number="9FBA02"
+                  description="A required pointer or size parameter was invalid">
+<use>
+<p>
+This error is reported when the caller supplies an invalid text pointer, an invalid
+length, or an invalid style parameter block for the requested operation.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Open" />
+<reference type="swi" name="NanoColour_SetStyle" />
+<reference type="swi" name="NanoColour_Recolour" />
+</related>
+</error-definition>
+
+<error-definition name="NanoColour_NoSyntax"
+                  number="9FBA03"
+                  description="No suitable syntax could be found">
+<use>
+<p>
+This error is reported when the caller asks for auto-detection and the module cannot
+identify a suitable syntax from <sysvar>NanoRCs$Dir</sysvar>, or when the explicitly
+named syntax does not exist.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Open" />
+<reference type="swi" name="NanoColour_Recolour" />
+<reference type="sysvar" name="NanoRCs$Dir" />
+</related>
+</error-definition>
+
+<error-definition name="NanoColour_FontNotFound"
+                  number="9FBA04"
+                  description="The requested font could not be selected">
+<use>
+<p>
+This error is reported when the module cannot create or select the requested font for a
+session.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_SetStyle" />
+</related>
+</error-definition>
+
+<error-definition name="NanoColour_NoMemory"
+                  number="9FBA05"
+                  description="There was insufficient memory for the requested operation">
+<use>
+<p>
+This error is reported when the module cannot allocate the working storage needed for
+syntax processing, colour decoding, font state or rendering caches.
+</p>
+</use>
+<related>
+<reference type="swi" name="NanoColour_Open" />
+<reference type="swi" name="NanoColour_Recolour" />
+<reference type="swi" name="NanoColour_SetStyle" />
+</related>
+</error-definition>
+</section>
+
+<section title="Examples">
+<extended-example type='pseudo'>
+handle = SWI "NanoColour_Open", flags 0, text_ptr, text_len, 0
+SWI "NanoColour_SetStyle", set font and colours, handle,
+    "Corpus.Medium", 192, 192, foreground, background
+width, height = SWI "NanoColour_GetSize", 0, handle
+SWI "NanoColour_Render", 0, handle, x, y, 0
+SWI "NanoColour_Close", 0, handle
+</extended-example>
+</section>
+
+</chapter>
+
+<meta>
+ <maintainer>
+  <email name="Charles" address="gerph@gerph.org" />
+ </maintainer>
+ <disclaimer>
+    <p>
+        &copy; Charles, 2026.
+    </p>
+ </disclaimer>
+
+ <history>
+  <revision number="2" author="Charles" date="26 Apr 2026" title="Renamed module and assigned provisional bases">
+    <change>Renamed the module interface to NanoColour and documented provisional unallocated SWI and error bases.</change>
+  </revision>
+  <revision number="1" author="Charles" date="26 Apr 2026" title="Initial version">
+    <change>Documented the proposed NanoColour module interface and its SWIs.</change>
+  </revision>
+ </history>
+</meta>
+</riscos-prm>
