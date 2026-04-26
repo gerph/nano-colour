@@ -1,0 +1,27 @@
+REM >testmodule
+REM Basic integration test for the NanoColour module
+ON ERROR ERROR EXT ERR, REPORT$ + " at line " + STR$(ERL/10)
+
+MODE 27
+
+text$ = "; test module"+CHR$10+"title-string: NanoColour"+CHR$10+"help-string: NanoColour 0.01"+CHR$10
+length% = LEN(text$)
+
+DIM text_buffer% length% + 1
+DIM syntax_name% 16
+
+$text_buffer% = text$ + CHR$0
+$syntax_name% = "CMHG" + CHR$0
+
+SYS "NanoColour_Open", 0, text_buffer%, length%, syntax_name% TO handle%
+
+SYS "NanoColour_GetSize", 0, handle% TO width%, height%
+
+PRINT "Handle: "; handle%
+PRINT "Size: "; width%; " x "; height%
+
+SYS "NanoColour_Render", 0, handle%, 64, 900
+
+SYS "NanoColour_Close", 0, handle%
+
+PRINT "Done"

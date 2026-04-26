@@ -33,9 +33,16 @@ typedef struct {
     SyntaxRuleInternal *rules;
 } SyntaxInternal;
 
+typedef struct {
+    char *name;
+    char *syntax_regex;
+    char *magic_regex;
+} SyntaxInfo;
+
 /* Shared helper for string comparison */
 int my_strcasecmp(const char *s1, const char *s2);
 int my_strncasecmp(const char *s1, const char *s2, size_t n);
 char *my_strdup(const char *s);
+NanoStatus nanocolour_get_syntax_info(const char *filename, SyntaxInfo *info);
 
 #endif /* NANORC_INTERNAL_H */

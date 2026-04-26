@@ -1,0 +1,35 @@
+/*******************************************************************
+ * File:        discovery
+ * Purpose:     Syntax auto-discovery and caching for NanoColour
+ * Author:      Gerph
+ ******************************************************************/
+
+#ifndef DISCOVERY_H
+#define DISCOVERY_H
+
+#include <stddef.h>
+
+#include "RegEx/regex.h"
+#include "nanocolour.h"
+
+typedef struct SyntaxCache_s {
+    struct SyntaxCache_s *next;
+    char *name;
+    char *path;
+    regex_t syntax_re;
+    regex_t magic_re;
+    int has_syntax_re;
+    int has_magic_re;
+    Syntax *loaded_syntax;
+} SyntaxCache;
+
+void syntax_cache_init(void);
+
+void syntax_cache_final(void);
+
+NanoStatus syntax_find(const char *syntax_name,
+                       const char *buffer,
+                       size_t length,
+                       Syntax **syntax_out);
+
+#endif

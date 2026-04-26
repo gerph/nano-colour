@@ -1,0 +1,504 @@
+/*******************************************************************
+ * File:        module
+ * Purpose:     NanoColour module interface
+ * Author:      OpenAI Codex
+ ******************************************************************/
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "kernel.h"
+#include "discovery.h"
+#include "module_errors.h"
+#include "module_internal.h"
+#include "nanorc_internal.h"
+
+/* #define DEBUG */
+
+#ifdef DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
+
+#define DEFAULT_FONT_NAME   "Corpus.Medium"
+#define DEFAULT_FONT_WIDTH  (12 * 16)
+#define DEFAULT_FONT_HEIGHT (12 * 16)
+#define DEFAULT_FG_COLOUR   COLOUR_RGB(0, 0, 0)
+#define DEFAULT_BG_COLOUR   COLOUR_NONE
+
+#define OPEN_FLAGS_MASK      0u
+#define CLOSE_FLAGS_MASK     0u
+#define SETSTYLE_FLAGS_MASK  0x7u
+#define GETSIZE_FLAGS_MASK   0u
+#define RENDER_FLAGS_MASK    0x1u
+#define RECOLOUR_FLAGS_MASK  0u
+
+static gcontext_t *global_gcontext = NULL;
+static NanoSession *global_sessions = NULL;
+static int global_next_handle = 1;
+
+static _kernel_oserror *status_to_error(NanoStatus status)
+{
+    switch (status) {
+        case NANO_ERROR_NOMEM:
+            return err_NoMemory;
+
+        case NANO_ERROR_INVALID_ARG:
+            return err_BadParameter;
+
+        case NANO_ERROR_FILE:
+        case NANO_ERROR_REGEX:
+        default:
+            return err_NoSyntax;
+    }
+}
+
+static void session_detach_render(NanoSession *session)
+{
+    if (session->render) {
+        nanocolour_render_free(session->render);
+        session->render = NULL;
+    }
+}
+
+static void session_detach_file(NanoSession *session)
+{
+    session_detach_render(session);
+    if (session->file) {
+        nanocolour_free_coloured_file(session->file);
+        session->file = NULL;
+    }
+    if (session->text) {
+        free(session->text);
+        session->text = NULL;
+    }
+    session->text_length = 0;
+    session->syntax = NULL;
+}
+
+static void session_destroy(NanoSession *session)
+{
+    if (!session) return;
+
+    session_detach_file(session);
+
+    if (session->font != FONT_NONE && global_gcontext != NULL) {
+        global_gcontext->text_losefont(global_gcontext, session->font);
+        session->font = FONT_NONE;
+    }
+
+    free(session->font_name);
+    free(session);
+}
+
+static NanoSession *session_find(int handle)
+{
+    NanoSession *session;
+
+    for (session = global_sessions; session != NULL; session = session->next) {
+        if (session->handle == handle) {
+            return session;
+        }
+    }
+
+    return NULL;
+}
+
+static void session_unlink(NanoSession *session)
+{
+    NanoSession **link;
+
+    for (link = &global_sessions; *link != NULL; link = &(*link)->next) {
+        if (*link == session) {
+            *link = session->next;
+            return;
+        }
+    }
+}
+
+static _kernel_oserror *session_create_render(NanoSession *session)
+{
+    if (session->render != NULL) {
+        return NULL;
+    }
+
+    if (session->file == NULL || session->font == FONT_NONE || global_gcontext == NULL) {
+        return err_BadHandle;
+    }
+
+    session->render = nanocolour_render_create(session->file, global_gcontext, session->font);
+    if (!session->render) {
+        return err_NoMemory;
+    }
+
+    return NULL;
+}
+
+static _kernel_oserror *session_set_font(NanoSession *session,
+                                         const char *font_name,
+                                         int font_width,
+                                         int font_height)
+{
+    char *new_name;
+    font_t new_font;
+
+    if (global_gcontext == NULL || font_name == NULL || *font_name == '\0' ||
+        font_width <= 0 || font_height <= 0) {
+        return err_BadParameter;
+    }
+
+    new_name = my_strdup(font_name);
+    if (!new_name) {
+        return err_NoMemory;
+    }
+
+    new_font = global_gcontext->text_findfont(global_gcontext, font_name, font_width, font_height);
+    if (new_font == FONT_NONE) {
+        free(new_name);
+        return err_FontNotFound;
+    }
+
+    if (session->font != FONT_NONE) {
+        global_gcontext->text_losefont(global_gcontext, session->font);
+    }
+
+    free(session->font_name);
+    session->font_name = new_name;
+    session->font = new_font;
+    session->font_width = font_width;
+    session->font_height = font_height;
+
+    if (session->render != NULL) {
+        nanocolour_render_set_font(session->render, session->font);
+    } else if (session->file != NULL) {
+        return session_create_render(session);
+    }
+
+    return NULL;
+}
+
+static _kernel_oserror *session_set_text_and_syntax(NanoSession *session,
+                                                    const char *text,
+                                                    size_t length,
+                                                    const char *syntax_name)
+{
+    char *copy;
+    Syntax *syntax;
+    ColouredFile *file;
+    NanoStatus status;
+    _kernel_oserror *err;
+
+    if (text == NULL && length != 0) {
+        return err_BadParameter;
+    }
+
+    copy = malloc(length + 1);
+    if (!copy) {
+        return err_NoMemory;
+    }
+
+    if (length != 0) {
+        memcpy(copy, text, length);
+    }
+    copy[length] = '\0';
+
+    syntax = NULL;
+    status = syntax_find(syntax_name, copy, length, &syntax);
+    if (status != NANO_OK) {
+        free(copy);
+        return status_to_error(status);
+    }
+
+    file = NULL;
+    status = nanocolour_colour_file(copy, length, syntax, &file);
+    if (status != NANO_OK) {
+        free(copy);
+        return status_to_error(status);
+    }
+
+    session_detach_file(session);
+
+    session->text = copy;
+    session->text_length = length;
+    session->syntax = syntax;
+    session->file = file;
+
+    if (session->font != FONT_NONE) {
+        err = session_create_render(session);
+        if (err) {
+            session_detach_file(session);
+            return err;
+        }
+    }
+
+    return NULL;
+}
+
+
+/***************************************************************************
+ * Function:     Mod_Init
+ * Description:  Initialise the module, setting up vectors, callbacks and
+ *               any other parts of the system necessary for the module to
+ *               function.
+ * Parameters:   tail        = pointer to command line (control terminated)
+ *               podule_base = address of podule module was started from, or
+ *                             NULL if none
+ *               pw          = private word for module
+ * On exit:      Return NULL for successful initialisation, or a pointer to
+ *               an error block if the module could not start properly.
+ **************************************************************************/
+_kernel_oserror *Mod_Init(const char *tail, int podule_base, void *pw)
+{
+    (void)tail;
+    (void)podule_base;
+    (void)pw;
+
+    dprintf("Module NanoColour initialised\n");
+
+    global_gcontext = gcontext_initvdu(1);
+    if (global_gcontext == NULL) {
+        return err_NoMemory;
+    }
+
+    syntax_cache_init();
+    return NULL;
+}
+
+
+/***************************************************************************
+ * Function:     Mod_Final
+ * Description:  Finalise the module, shutting down any systems necessary,
+ *               freeing vectors and releasing workspace
+ * Parameters:   fatal       = fatality indicator; 1 if fatal, 0 if
+ *                             reinitialising
+ *               podule_base = address of podule module was started from, or
+ *                             NULL if none
+ *               pw          = private word for module
+ * On exit:      Return 0 for successful finalisation, or a pointer to an
+ *               error block if module was not shutdown properly.
+ **************************************************************************/
+_kernel_oserror *Mod_Final(int fatal, int podule_base, void *pw)
+{
+    (void)fatal;
+    (void)podule_base;
+    (void)pw;
+
+    dprintf("Module NanoColour dying\n");
+
+    while (global_sessions != NULL) {
+        NanoSession *next;
+
+        next = global_sessions->next;
+        session_destroy(global_sessions);
+        global_sessions = next;
+    }
+
+    syntax_cache_final();
+    global_gcontext = NULL;
+    global_next_handle = 1;
+
+    return NULL;
+}
+
+_kernel_oserror *SWI_Open(int swi, _kernel_swi_regs *r, void *pw)
+{
+    NanoSession *session;
+    _kernel_oserror *err;
+    const char *syntax_name;
+
+    (void)swi;
+    (void)pw;
+
+    if (((unsigned)r->r[0] & OPEN_FLAGS_MASK) != 0u) {
+        return err_BadFlags;
+    }
+
+    if (r->r[1] == 0 && r->r[2] != 0) {
+        return err_BadParameter;
+    }
+
+    session = calloc(1, sizeof(NanoSession));
+    if (!session) {
+        return err_NoMemory;
+    }
+
+    session->handle = global_next_handle++;
+    session->fg_colour = DEFAULT_FG_COLOUR;
+    session->bg_colour = DEFAULT_BG_COLOUR;
+    session->font = FONT_NONE;
+
+    err = session_set_font(session, DEFAULT_FONT_NAME, DEFAULT_FONT_WIDTH, DEFAULT_FONT_HEIGHT);
+    if (err) {
+        session_destroy(session);
+        return err;
+    }
+
+    syntax_name = (const char *)r->r[3];
+    err = session_set_text_and_syntax(session,
+                                      (const char *)r->r[1],
+                                      (size_t)r->r[2],
+                                      syntax_name);
+    if (err) {
+        session_destroy(session);
+        return err;
+    }
+
+    session->next = global_sessions;
+    global_sessions = session;
+    r->r[0] = session->handle;
+
+    return NULL;
+}
+
+_kernel_oserror *SWI_Close(int swi, _kernel_swi_regs *r, void *pw)
+{
+    NanoSession *session;
+
+    (void)swi;
+    (void)pw;
+
+    if (((unsigned)r->r[0] & CLOSE_FLAGS_MASK) != 0u) {
+        return err_BadFlags;
+    }
+
+    session = session_find(r->r[1]);
+    if (!session) {
+        return err_BadHandle;
+    }
+
+    session_unlink(session);
+    session_destroy(session);
+    return NULL;
+}
+
+_kernel_oserror *SWI_SetStyle(int swi, _kernel_swi_regs *r, void *pw)
+{
+    NanoSession *session;
+    unsigned flags;
+    _kernel_oserror *err;
+
+    (void)swi;
+    (void)pw;
+
+    flags = (unsigned)r->r[0];
+    if ((flags & ~SETSTYLE_FLAGS_MASK) != 0u) {
+        return err_BadFlags;
+    }
+
+    session = session_find(r->r[1]);
+    if (!session) {
+        return err_BadHandle;
+    }
+
+    if ((flags & 0x4u) != 0u) {
+        err = session_set_font(session, (const char *)r->r[2], r->r[3], r->r[4]);
+        if (err) {
+            return err;
+        }
+    }
+
+    if ((flags & 0x1u) != 0u) {
+        session->fg_colour = (colour_t)r->r[5];
+    }
+    if ((flags & 0x2u) != 0u) {
+        session->bg_colour = (colour_t)r->r[6];
+    }
+
+    return NULL;
+}
+
+_kernel_oserror *SWI_GetSize(int swi, _kernel_swi_regs *r, void *pw)
+{
+    NanoSession *session;
+    bounds_t size;
+    _kernel_oserror *err;
+
+    (void)swi;
+    (void)pw;
+
+    if (((unsigned)r->r[0] & GETSIZE_FLAGS_MASK) != 0u) {
+        return err_BadFlags;
+    }
+
+    session = session_find(r->r[1]);
+    if (!session) {
+        return err_BadHandle;
+    }
+
+    err = session_create_render(session);
+    if (err) {
+        return err;
+    }
+
+    nanocolour_render_get_size(session->render, &size);
+    r->r[0] = size.width;
+    r->r[1] = size.height;
+    return NULL;
+}
+
+_kernel_oserror *SWI_Render(int swi, _kernel_swi_regs *r, void *pw)
+{
+    NanoSession *session;
+    unsigned flags;
+    const bbox_t *clip;
+    _kernel_oserror *err;
+
+    (void)swi;
+    (void)pw;
+
+    flags = (unsigned)r->r[0];
+    if ((flags & ~RENDER_FLAGS_MASK) != 0u) {
+        return err_BadFlags;
+    }
+
+    session = session_find(r->r[1]);
+    if (!session) {
+        return err_BadHandle;
+    }
+
+    err = session_create_render(session);
+    if (err) {
+        return err;
+    }
+
+    clip = NULL;
+    if ((flags & 0x1u) != 0u) {
+        clip = (const bbox_t *)r->r[4];
+    }
+
+    nanocolour_render_draw(session->render,
+                           r->r[2],
+                           r->r[3],
+                           session->bg_colour,
+                           session->fg_colour,
+                           clip);
+    return NULL;
+}
+
+_kernel_oserror *SWI_Recolour(int swi, _kernel_swi_regs *r, void *pw)
+{
+    NanoSession *session;
+
+    (void)swi;
+    (void)pw;
+
+    if (((unsigned)r->r[0] & RECOLOUR_FLAGS_MASK) != 0u) {
+        return err_BadFlags;
+    }
+
+    session = session_find(r->r[1]);
+    if (!session) {
+        return err_BadHandle;
+    }
+
+    if (r->r[2] == 0 && r->r[3] != 0) {
+        return err_BadParameter;
+    }
+
+    return session_set_text_and_syntax(session,
+                                       (const char *)r->r[2],
+                                       (size_t)r->r[3],
+                                       (const char *)r->r[4]);
+}

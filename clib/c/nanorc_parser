@@ -16,6 +16,13 @@
 #include "nanocolour.h"
 #include "nanorc_internal.h"
 
+/* #define NANORC_PARSER_DEBUG */
+#ifdef NANORC_PARSER_DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
+
 int my_strcasecmp(const char *s1, const char *s2) {
     while (*s1 && (tolower(*s1) == tolower(*s2))) {
         s1++; s2++;
@@ -109,7 +116,12 @@ static char *extract_quoted(char **ptr) {
     }
     s++;
     start = s;
-    while (*s && (*s != '"' || (s > start && *(s-1) == '\\'))) {
+    while (*s) {
+        if (*s == '"' &&
+            !(s > start && *(s - 1) == '\\') &&
+            (s[1] == '\0' || isspace((unsigned char)s[1]))) {
+            break;
+        }
         s++;
     }
     if (*s == '"') {
@@ -136,8 +148,19 @@ static char *fix_regex(char *re) {
     char *new_re = malloc(strlen(re) * 7 + 1);
     char *d = new_re;
     char *s = re;
+    int in_class = 0;
     while (*s) {
-        if (*s == '\\' && *(s+1) == '<') {
+        if (*s == '[') {
+            in_class = 1;
+            *d++ = *s++;
+        } else if (*s == ']' && in_class) {
+            in_class = 0;
+            *d++ = *s++;
+        } else if (!in_class &&
+                   ((*s == '*' || *s == '+' || *s == '?') && *(s + 1) == '?')) {
+            *d++ = *s++;
+            s++;
+        } else if (*s == '\\' && *(s+1) == '<') {
             *d++ = '['; *d++ = '['; *d++ = ':'; *d++ = '<'; *d++ = ':'; *d++ = ']'; *d++ = ']';
             s += 2;
         } else if (*s == '\\' && *(s+1) == '>') {
@@ -150,6 +173,132 @@ static char *fix_regex(char *re) {
     *d = '\0';
     free(re);
     return new_re;
+}
+
+static NanoStatus append_regex(char **dest, const char *re) {
+    char *dup;
+    char *fixed;
+
+    dup = my_strdup(re);
+    if (!dup) return NANO_ERROR_NOMEM;
+
+    fixed = fix_regex(dup);
+    if (!fixed) return NANO_ERROR_NOMEM;
+
+    if (*dest == NULL) {
+        *dest = fixed;
+    } else {
+        size_t old_len;
+        size_t new_len;
+        char *combined;
+
+        old_len = strlen(*dest);
+        new_len = strlen(fixed);
+        combined = malloc(old_len + new_len + 5);
+        if (!combined) {
+            free(fixed);
+            return NANO_ERROR_NOMEM;
+        }
+        sprintf(combined, "(%s)|(%s)", *dest, fixed);
+        free(*dest);
+        free(fixed);
+        *dest = combined;
+    }
+
+    return NANO_OK;
+}
+
+NanoStatus nanocolour_get_syntax_info(const char *filename, SyntaxInfo *info) {
+    FILE *f;
+    char line[4096];
+    NanoStatus status;
+
+    if (!info) return NANO_ERROR_INVALID_ARG;
+
+    info->name = NULL;
+    info->syntax_regex = NULL;
+    info->magic_regex = NULL;
+
+    f = fopen(filename, "r");
+    if (!f) {
+        return NANO_ERROR_FILE;
+    }
+
+    status = NANO_OK;
+
+    while (fgets(line, sizeof(line), f)) {
+        char *p;
+
+        p = line;
+        while (*p && isspace(*p)) p++;
+        if (*p == '#' || *p == '\0') continue;
+
+        if (strncmp(p, "syntax", 6) == 0 && isspace(p[6])) {
+            char *name;
+
+            p += 7;
+            name = extract_quoted(&p);
+            if (!name) {
+                status = NANO_ERROR_NOMEM;
+                break;
+            }
+            free(info->name);
+            info->name = name;
+
+            while (*p) {
+                char *re;
+
+                while (*p && isspace(*p)) p++;
+                if (!*p) break;
+
+                re = extract_quoted(&p);
+                if (!re) {
+                    status = NANO_ERROR_NOMEM;
+                    break;
+                }
+                if (*re) {
+                    status = append_regex(&info->syntax_regex, re);
+                }
+                free(re);
+                if (status != NANO_OK) break;
+            }
+            if (status != NANO_OK) break;
+        } else if (strncmp(p, "header", 6) == 0 && isspace(p[6])) {
+            p += 7;
+
+            while (*p) {
+                char *re;
+
+                while (*p && isspace(*p)) p++;
+                if (!*p) break;
+
+                re = extract_quoted(&p);
+                if (!re) {
+                    status = NANO_ERROR_NOMEM;
+                    break;
+                }
+                if (*re) {
+                    status = append_regex(&info->magic_regex, re);
+                }
+                free(re);
+                if (status != NANO_OK) break;
+            }
+            if (status != NANO_OK) break;
+        }
+    }
+
+    fclose(f);
+
+    if (status != NANO_OK) {
+        free(info->name);
+        free(info->syntax_regex);
+        free(info->magic_regex);
+        info->name = NULL;
+        info->syntax_regex = NULL;
+        info->magic_regex = NULL;
+    }
+
+    return status;
 }
 
 NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
