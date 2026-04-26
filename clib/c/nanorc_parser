@@ -133,12 +133,27 @@ static char *extract_quoted(char **ptr) {
 }
 
 static char *fix_regex(char *re) {
-    /* Currently dummy as per user fix, but still handles allocation */
-    return re;
+    char *new_re = malloc(strlen(re) * 7 + 1);
+    char *d = new_re;
+    char *s = re;
+    while (*s) {
+        if (*s == '\\' && *(s+1) == '<') {
+            *d++ = '['; *d++ = '['; *d++ = ':'; *d++ = '<'; *d++ = ':'; *d++ = ']'; *d++ = ']';
+            s += 2;
+        } else if (*s == '\\' && *(s+1) == '>') {
+            *d++ = '['; *d++ = '['; *d++ = ':'; *d++ = '>'; *d++ = ':'; *d++ = ']'; *d++ = ']';
+            s += 2;
+        } else {
+            *d++ = *s++;
+        }
+    }
+    *d = '\0';
+    free(re);
+    return new_re;
 }
 
 NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
-    FILE *f = fopen(filename, "r");
+    FILE *f;
     SyntaxInternal *si;
     char line[4096];
     NanoStatus status = NANO_OK;
@@ -146,10 +161,17 @@ NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
     if (!syntax_out) return NANO_ERROR_INVALID_ARG;
     *syntax_out = NULL;
 
-    if (!f) return NANO_ERROR_FILE;
+    dprintf("Reading '%s'\n", filename);
+    f = fopen(filename, "r");
+    if (!f)
+    {
+        dprintf("Could not open file '%s'\n", filename);
+        return NANO_ERROR_FILE;
+    }
 
     si = calloc(1, sizeof(SyntaxInternal));
     if (!si) {
+        dprintf("No memory\n");
         fclose(f);
         return NANO_ERROR_NOMEM;
     }
@@ -158,6 +180,7 @@ NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
         char *p = line;
         while (*p && isspace(*p)) p++;
         if (*p == '#' || *p == '\0') continue;
+        dprintf("Read line '%s'\n", p);
 
         if (strncmp(p, "syntax", 6) == 0 && isspace(p[6])) {
             p += 7;
@@ -210,13 +233,18 @@ NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
                             
                             {
                                 int err;
+                                static char errbuf[256];
                                 err = regcomp(&r->re_start, f_start, REG_EXTENDED | (icase ? REG_ICASE : 0));
                                 if (err) {
+                                    regerror(err, &r->re_start, errbuf, sizeof(errbuf));
+                                    dprintf("regcomp start failed for '%s': %s\n", f_start, errbuf);
                                     free(f_start); free(f_end);
                                     status = NANO_ERROR_REGEX; break;
                                 }
                                 err = regcomp(&r->re_end, f_end, REG_EXTENDED | (icase ? REG_ICASE : 0));
                                 if (err) {
+                                    regerror(err, &r->re_end, errbuf, sizeof(errbuf));
+                                    dprintf("regcomp end failed for '%s': %s\n", f_end, errbuf);
                                     regfree(&r->re_start);
                                     free(f_start); free(f_end);
                                     status = NANO_ERROR_REGEX; break;
@@ -253,8 +281,11 @@ NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
                         f_re = fix_regex(re);
                         {
                             int err;
+                            static char errbuf[256];
                             err = regcomp(&r->re_start, f_re, REG_EXTENDED | (icase ? REG_ICASE : 0));
                             if (err) {
+                                regerror(err, &r->re_start, errbuf, sizeof(errbuf));
+                                dprintf("regcomp failed for '%s': %s\n", f_re, errbuf);
                                 free(f_re);
                                 status = NANO_ERROR_REGEX; break;
                             }
@@ -271,9 +302,11 @@ NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
     }
     fclose(f);
     if (status != NANO_OK) {
+        dprintf("Exited with a failure: %i\n", status);
         nanocolour_free_syntax((Syntax *)si);
         return status;
     }
+    dprintf("Opened and read file OK\n");
     *syntax_out = (Syntax *)si;
     return NANO_OK;
 }
