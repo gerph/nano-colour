@@ -1,0 +1,32 @@
+/*******************************************************************
+ * File:        module_internal
+ * Purpose:     Internal module state for NanoColour
+ * Author:      OpenAI Codex
+ ******************************************************************/
+
+#ifndef MODULE_INTERNAL_H
+#define MODULE_INTERNAL_H
+
+#include <stddef.h>
+
+#include "GContext/gcontext.h"
+#include "nanocolour.h"
+#include "nanocolour_render.h"
+
+typedef struct NanoSession_s {
+    struct NanoSession_s *next;
+    int handle;
+    char *text;
+    size_t text_length;
+    char *font_name;
+    int font_width;
+    int font_height;
+    colour_t fg_colour;
+    colour_t bg_colour;
+    font_t font;
+    const Syntax *syntax;
+    ColouredFile *file;
+    NanoRender *render;
+} NanoSession;
+
+#endif
