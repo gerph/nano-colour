@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include "swis.h"
 
 #ifdef FORTIFY
 #include "Fortify/fortify.h"
@@ -15,6 +16,15 @@
 
 #include "nanocolour.h"
 #include "nanorc_internal.h"
+
+/* Comment out to disable debug */
+#define DEBUG
+
+#ifdef DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
 
 int my_strcasecmp(const char *s1, const char *s2) {
     while (*s1 && (tolower(*s1) == tolower(*s2))) {
@@ -155,7 +165,7 @@ static char *fix_regex(char *re) {
 NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
     FILE *f;
     SyntaxInternal *si;
-    char line[4096];
+    char line[512];
     NanoStatus status = NANO_OK;
 
     if (!syntax_out) return NANO_ERROR_INVALID_ARG;
@@ -187,6 +197,13 @@ NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out) {
             free(si->name);
             si->name = extract_quoted(&p);
             if (!si->name) { status = NANO_ERROR_NOMEM; break; }
+            while (*p && isspace(*p)) p++;
+            if (*p) {
+                si->syntax_regex = extract_quoted(&p);
+            }
+        } else if (strncmp(p, "magic", 5) == 0 && isspace(p[5])) {
+            p += 6;
+            si->magic_regex = extract_quoted(&p);
         } else if ((strncmp(p, "color", 5) == 0 && isspace(p[5])) ||
                    (strncmp(p, "icolor", 6) == 0 && isspace(p[6]))) {
             int icase = (*p == 'i');
@@ -317,6 +334,8 @@ void nanocolour_free_syntax(Syntax *syntax) {
     if (!syntax) return;
     si = (SyntaxInternal *)syntax;
     free(si->name);
+    free(si->syntax_regex);
+    free(si->magic_regex);
     for (i = 0; i < si->rule_count; i++) {
         regfree(&si->rules[i].re_start);
         if (si->rules[i].type == RULE_MULTI) {
@@ -325,4 +344,28 @@ void nanocolour_free_syntax(Syntax *syntax) {
     }
     free(si->rules);
     free(si);
+}
+
+NanoStatus nanocolour_get_syntax_info(const char *filename, SyntaxInfo *info_out) {
+    FILE *f = fopen(filename, "r");
+    char line[512];
+    if (!f) return NANO_ERROR_FILE;
+    memset(info_out, 0, sizeof(SyntaxInfo));
+    while (fgets(line, sizeof(line), f)) {
+        char *p = line;
+        while (*p && isspace(*p)) p++;
+        if (*p == '#' || *p == '\0') continue;
+        if (strncmp(p, "syntax", 6) == 0 && isspace(p[6])) {
+            p += 7;
+            info_out->name = extract_quoted(&p);
+            while (*p && isspace(*p)) p++;
+            if (*p) info_out->syntax_regex = extract_quoted(&p);
+        } else if (strncmp(p, "magic", 5) == 0 && isspace(p[5])) {
+            p += 6;
+            info_out->magic_regex = extract_quoted(&p);
+        }
+        if (info_out->syntax_regex && info_out->magic_regex) break;
+    }
+    fclose(f);
+    return NANO_OK;
 }

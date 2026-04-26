@@ -1,0 +1,30 @@
+# Makefile for NanoColour module
+#
+
+COMPONENT  = NanoColour
+TARGET     = NanoColour
+
+INCLUDES   = C:
+CDEFINES   = -DFORTIFY
+LIBS       = C:RegEx.o.libRegEx C:GContext.o.libGContext C:Fortify.o.libFortify
+
+
+OBJS       = o.modhead \
+             o.module \
+             o.handles \
+             o.discovery \
+             o.drawfile \
+             o.nanocolour \
+             o.nanorc_parser \
+             o.nanocolour_render
+
+include CModule
+
+# Dependencies
+${OZDIR}.module: h.modhead h.module_internal
+${OZDIR}.handles: h.module_internal h.modhead
+${OZDIR}.discovery: h.module_internal h.modhead
+${OZDIR}.drawfile: h.module_internal h.modhead
+${OZDIR}.nanocolour: h.nanocolour h.nanorc_internal
+${OZDIR}.nanorc_parser: h.nanocolour h.nanorc_internal
+${OZDIR}.nanocolour_render: h.nanocolour_render h.nanocolour

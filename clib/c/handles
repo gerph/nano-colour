@@ -1,0 +1,70 @@
+/*******************************************************************
+ * File:        handles
+ * Purpose:     Handle management for NanoColour module
+ * Author:      Gerph
+ ******************************************************************/
+
+#include <stdlib.h>
+#include <string.h>
+#include "module_internal.h"
+#include "modhead.h"
+
+static Handle *global_handles = NULL;
+static int global_next_id = 0;
+
+_kernel_oserror *handle_create(HandleType type, void *data, int *id_out) {
+    Handle *h = malloc(sizeof(Handle));
+    if (!h) return err_NoMemory;
+
+    h->id = ++global_next_id;
+    h->type = type;
+    h->data = data;
+    h->next = global_handles;
+    global_handles = h;
+
+    *id_out = h->id;
+    return NULL;
+}
+
+_kernel_oserror *handle_lookup(int id, HandleType type, void **data_out) {
+    Handle *h;
+    for (h = global_handles; h != NULL; h = h->next) {
+        if (h->id == id && h->type == type) {
+            *data_out = h->data;
+            return NULL;
+        }
+    }
+    return err_BadHandle;
+}
+
+_kernel_oserror *handle_free(int id, HandleType type) {
+    Handle *h, *prev = NULL;
+    for (h = global_handles; h != NULL; h = h->next) {
+        if (h->id == id && h->type == type) {
+            if (prev) prev->next = h->next;
+            else global_handles = h->next;
+
+            switch (h->type) {
+                case HANDLE_SYNTAX:
+                    nanocolour_free_syntax((Syntax *)h->data);
+                    break;
+                case HANDLE_COLOURED_FILE:
+                    nanocolour_free_coloured_file((ColouredFile *)h->data);
+                    break;
+                case HANDLE_RENDER:
+                    nanocolour_render_free((NanoRender *)h->data);
+                    break;
+            }
+            free(h);
+            return NULL;
+        }
+        prev = h;
+    }
+    return err_BadHandle;
+}
+
+void handle_free_all(void) {
+    while (global_handles) {
+        handle_free(global_handles->id, global_handles->type);
+    }
+}

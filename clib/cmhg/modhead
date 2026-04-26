@@ -1,0 +1,37 @@
+; CMHG header for NanoColour module
+
+#include "VersionNum"
+#include "riscos/NewErrors.h"
+
+title-string: NanoColour
+help-string: NanoColour Module_MajorVersion_CMHG
+
+swi-chunk-base-number: &5B380
+
+swi-decoding-table: NanoColour \
+    ParseRC, \
+    FreeSyntax, \
+    ColourFile, \
+    FreeColouredFile, \
+    RenderCreate, \
+    RenderFree, \
+    RenderGetSize, \
+    RenderDraw, \
+    RenderSetFont, \
+    ToDrawFile, \
+    ToDrawBuffer
+
+error-base: &840000
+
+error-identifiers: \
+    err_NoMemory(ErrorNumber_VarNoRoom, "NoMemory:Not enough memory"), \
+    err_BadHandle("BadHandle:Invalid handle"), \
+    err_BufferOverflow(ErrorNumber_BuffOverflow, "BufferOverflow:Buffer overflow"), \
+    err_FileError(ErrorNumber_FileNotFound, "FileError:File not found"), \
+    err_RegexError("RegexError:Invalid regular expression"), \
+    err_InvalidArg("InvalidArg:Invalid argument"), \
+    err_InternalError("InternalError:Internal consistency fault")
+
+initialisation-code: Mod_Init
+finalisation-code: Mod_Final
+swi-handler-code: Mod_SWI

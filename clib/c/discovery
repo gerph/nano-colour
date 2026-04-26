@@ -1,0 +1,174 @@
+/*******************************************************************
+ * File:        discovery
+ * Purpose:     Syntax auto-discovery and caching for NanoColour
+ * Author:      Gerph
+ ******************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "swis.h"
+#include "RegEx/regex.h"
+#include "nanorc_internal.h"
+#include "module_internal.h"
+#include "modhead.h"
+
+/* #define DEBUG */
+#ifdef DEBUG
+#define dprintf if (1) printf
+#else
+#define dprintf if (0) printf
+#endif
+
+static SyntaxCache *global_syntax_cache = NULL;
+static int cache_initialised = 0;
+
+static char *read_var(const char *name, char *buf, size_t size) {
+    int len;
+    _kernel_oserror *err = _swix(OS_ReadVarVal, _INR(0,4)|_OUT(2),
+                                 name, buf, size - 1, 0, 3, &len);
+    if (err || len <= 0) return NULL;
+    buf[len] = '\0';
+    return buf;
+}
+
+static void add_to_cache(const char *path) {
+    SyntaxInfo info;
+    SyntaxCache *entry;
+
+    if (nanocolour_get_syntax_info(path, &info) != NANO_OK) return;
+
+    entry = calloc(1, sizeof(SyntaxCache));
+    if (!entry) {
+        free(info.name); free(info.syntax_regex); free(info.magic_regex);
+        return;
+    }
+
+    entry->path = my_strdup(path);
+    if (info.syntax_regex) {
+        if (regcomp(&entry->syntax_re, info.syntax_regex, REG_EXTENDED | REG_NOSUB | REG_ICASE) == 0) {
+            entry->has_syntax_re = 1;
+        }
+    }
+    if (info.magic_regex) {
+        if (regcomp(&entry->magic_re, info.magic_regex, REG_EXTENDED | REG_NOSUB | REG_ICASE) == 0) {
+            entry->has_magic_re = 1;
+        }
+    }
+
+    free(info.name);
+    free(info.syntax_regex);
+    free(info.magic_regex);
+
+    entry->next = global_syntax_cache;
+    global_syntax_cache = entry;
+}
+
+void syntax_cache_init(void) {
+    char resolved_dir[256];
+    int context = 0;
+    int nread;
+    int buffer_w[128];
+    char *buffer = (char *)buffer_w;
+
+    if (cache_initialised) return;
+
+    if (!read_var("NanoRCs$Dir", resolved_dir, sizeof(resolved_dir))) {
+        strcpy(resolved_dir, "$.NanoRCs");
+    }
+
+    while (1) {
+        _kernel_oserror *err = _swix(OS_GBPB, _INR(0,6)|_OUT(3)|_OUT(4),
+                                     12, resolved_dir, buffer, 1, context, sizeof(buffer_w), "*",
+                                     &nread, &context);
+        if (err || nread == 0) break;
+        if (context == -1) break;
+
+        {
+            char *leaf = buffer + 24;
+            char full_path[512];
+
+            /* Add <dir>.<leaf> */
+            sprintf(full_path, "%s.%s", resolved_dir, leaf);
+            add_to_cache(full_path);
+            /* We could check if it exists before adding, but nanocolour_get_syntax_info will fail if not */
+        }
+    }
+
+    /* Ensure default is there if available */
+    {
+        char default_path[512];
+        sprintf(default_path, "%s.default/nanorc", resolved_dir);
+        add_to_cache(default_path);
+    }
+
+    cache_initialised = 1;
+}
+
+void syntax_cache_final(void) {
+    while (global_syntax_cache) {
+        SyntaxCache *next = global_syntax_cache->next;
+        free(global_syntax_cache->path);
+        if (global_syntax_cache->has_syntax_re) regfree(&global_syntax_cache->syntax_re);
+        if (global_syntax_cache->has_magic_re) regfree(&global_syntax_cache->magic_re);
+        if (global_syntax_cache->loaded_syntax) nanocolour_free_syntax(global_syntax_cache->loaded_syntax);
+        free(global_syntax_cache);
+        global_syntax_cache = next;
+    }
+    cache_initialised = 0;
+}
+
+_kernel_oserror *syntax_find_for_file(const char *filename, Syntax **syntax_out) {
+    char first_line[256];
+    FILE *f;
+    SyntaxCache *entry;
+    SyntaxCache *default_entry = NULL;
+
+    if (!cache_initialised) syntax_cache_init();
+
+    *syntax_out = NULL;
+
+    f = fopen(filename, "r");
+    if (f) {
+        if (!fgets(first_line, sizeof(first_line), f)) first_line[0] = '\0';
+        fclose(f);
+    } else {
+        first_line[0] = '\0';
+    }
+
+    for (entry = global_syntax_cache; entry != NULL; entry = entry->next) {
+        int matched = 0;
+
+        if (entry->has_syntax_re && regexec(&entry->syntax_re, filename, 0, NULL, 0) == 0) {
+            matched = 1;
+        }
+        if (!matched && entry->has_magic_re && first_line[0] && regexec(&entry->magic_re, first_line, 0, NULL, 0) == 0) {
+            matched = 1;
+        }
+
+        if (matched) {
+            if (!entry->loaded_syntax) {
+                nanocolour_parse_rc(entry->path, &entry->loaded_syntax);
+            }
+            if (entry->loaded_syntax) {
+                *syntax_out = entry->loaded_syntax;
+                return NULL;
+            }
+        }
+
+        if (strstr(entry->path, "default/nanorc")) default_entry = entry;
+    }
+
+    /* Fallback */
+    if (default_entry) {
+        if (!default_entry->loaded_syntax) {
+            nanocolour_parse_rc(default_entry->path, &default_entry->loaded_syntax);
+        }
+        if (default_entry->loaded_syntax) {
+            *syntax_out = default_entry->loaded_syntax;
+            return NULL;
+        }
+    }
+
+    return err_FileError;
+}

@@ -1,0 +1,59 @@
+/*******************************************************************
+ * File:        module_internal
+ * Purpose:     Internal module state and handle management
+ * Author:      Gerph
+ ******************************************************************/
+
+#ifndef MODULE_INTERNAL_H
+#define MODULE_INTERNAL_H
+
+#include "kernel.h"
+#include "nanocolour.h"
+#include "nanocolour_render.h"
+#include "GContext/gcontext.h"
+
+typedef enum {
+    HANDLE_SYNTAX = 1,
+    HANDLE_COLOURED_FILE,
+    HANDLE_RENDER
+} HandleType;
+
+typedef struct Handle_s {
+    struct Handle_s *next;
+    int id;
+    HandleType type;
+    void *data;
+} Handle;
+
+#include "RegEx/regex.h"
+
+typedef struct SyntaxCache_s {
+    struct SyntaxCache_s *next;
+    char *path;
+    regex_t syntax_re;
+    regex_t magic_re;
+    int has_syntax_re;
+    int has_magic_re;
+    Syntax *loaded_syntax;
+} SyntaxCache;
+
+/* Global state */
+extern gcontext_t *global_gc;
+
+/* Handle management */
+_kernel_oserror *handle_create(HandleType type, void *data, int *id_out);
+_kernel_oserror *handle_lookup(int id, HandleType type, void **data_out);
+_kernel_oserror *handle_free(int id, HandleType type);
+void handle_free_all(void);
+
+/* Cache management */
+void syntax_cache_init(void);
+void syntax_cache_final(void);
+_kernel_oserror *syntax_find_for_file(const char *filename, Syntax **syntax_out);
+
+/* DrawFile generation */
+_kernel_oserror *drawfile_generate(const ColouredFile *cf, const char *font_name, int font_x, int font_y,
+                                 uint32_t bg_col, uint32_t fg_col,
+                                 void *buffer, size_t *length);
+
+#endif /* MODULE_INTERNAL_H */

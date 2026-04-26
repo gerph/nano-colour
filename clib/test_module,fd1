@@ -1,0 +1,61 @@
+REM Test NanoColour module
+
+ON ERROR PRINT REPORT$;" at ";ERL/10 : END
+
+*RMLoad rm32.NanoColour
+*Set NanoRCs$Dir @
+*Cat
+
+target_file$ = "c.module"
+nanorc_file$ = "nanorcs.c-file/nanorc"
+
+PRINT "--- Testing ParseRC ---"
+SYS "XNanoColour_ParseRC", nanorc_file$ TO syntax_h%; flags%
+IF (flags% AND 1) THEN SYS "OS_GenerateError", syntax_h%
+PRINT "Syntax handle: "; syntax_h%
+
+PRINT "--- Testing ColourFile ---"
+SYS "XNanoColour_ColourFile", syntax_h%, target_file$ TO file_h%; flags%
+IF (flags% AND 1) THEN SYS "OS_GenerateError", file_h%
+PRINT "ColouredFile handle: "; file_h%
+
+PRINT "--- Testing ColourFile (Auto) ---"
+REMSYS "XNanoColour_ColourFile", 0, target_file$ TO auto_file_h%; flags%
+REMIF (flags% AND 1) THEN SYS "OS_GenerateError", auto_file_h%
+REMPRINT "Auto ColouredFile handle: "; auto_file_h%
+
+PRINT "--- Testing Render ---"
+font_name$ = "Corpus.Medium"
+SYS "XNanoColour_RenderCreate", file_h%, font_name$, 12*16, 12*16 TO render_h%; flags%
+IF (flags% AND 1) THEN SYS "OS_GenerateError", render_h%
+PRINT "Render handle: "; render_h%
+
+SYS "NanoColour_RenderGetSize", render_h% TO w%, h%
+PRINT "Rendered size: "; w%; " x "; h%
+
+PRINT "--- Testing ToDrawBuffer (Length Negotiation) ---"
+SYS "XNanoColour_ToDrawBuffer", 0, 0, target_file$, 0, font_name$, 12*16, 12*16, &FFFFFF00, &00000000 TO r0%, r1%; flags%
+IF (flags% AND 1) THEN
+  PRINT "Expected error: BufferOverflow"
+  size% = -r1%
+  PRINT "Required size: "; size%
+
+  DIM buffer% size%
+  SYS "NanoColour_ToDrawBuffer", buffer%, size%, target_file$, 0, font_name$, 12*16, 12*16, &FFFFFF00, &00000000 TO , actual_size%
+  PRINT "Actual size: "; actual_size%
+
+  PRINT "--- Testing ToDrawFile ---"
+  SYS "NanoColour_ToDrawFile", "test_out", target_file$, 0, font_name$, 12*16, 12*16, &FFFFFF00, &00000000
+  PRINT "DrawFile 'test_out' created."
+  *FileInfo test_out
+ELSE
+  PRINT "Error: ToDrawBuffer (length 0) did not return overflow (Flags=";flags%;")"
+ENDIF
+
+PRINT "--- Cleaning up ---"
+SYS "NanoColour_RenderFree", render_h%
+SYS "NanoColour_FreeColouredFile", file_h%
+SYS "NanoColour_FreeColouredFile", auto_file_h%
+SYS "NanoColour_FreeSyntax", syntax_h%
+
+PRINT "Tests complete."

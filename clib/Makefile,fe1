@@ -27,10 +27,10 @@ TYPE       = aif
 INCLUDES   = C:
 
 # Space separated list of defines to set, eg -DDEBUG
-CDEFINES   = -DFORTIFY
+CDEFINES   =
 
 # Space separated list of libraries to link against, eg C:LibName.o.libLibName
-LIBS       = ${CLIB} C:RegEx.o.libRegEx C:GContext.o.libGContext C:Fortify.o.libFortify
+LIBS       = ${CLIB} C:RegEx.o.libRegEx C:GContext.o.libGContext
 
 # Objects to build, using the format o.<name> (will be varied for build type)
 OBJS       = o.main o.nanocolour o.nanorc_parser o.nanocolour_render o.testrender

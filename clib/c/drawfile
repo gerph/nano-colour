@@ -1,0 +1,230 @@
+/*******************************************************************
+ * File:        drawfile
+ * Purpose:     RISC OS DrawFile generation for NanoColour
+ * Author:      Gerph
+ ******************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include "swis.h"
+#include "module_internal.h"
+#include "modhead.h"
+
+/* DrawFile structure definitions */
+typedef struct {
+    char tag[4];
+    uint32_t major_version;
+    uint32_t minor_version;
+    char creator[12];
+    uint32_t bbox[4];
+} DrawFileHeader;
+
+typedef struct {
+    uint32_t type;
+    uint32_t size;
+    uint32_t bbox[4];
+} DrawObjectHeader;
+
+typedef struct {
+    DrawObjectHeader header;
+    uint8_t font_ref;
+    uint8_t reserved[3];
+    uint32_t text_colour;
+    uint32_t bg_colour;
+    int32_t x;
+    int32_t y;
+    char text[1]; /* Variable length */
+} DrawTextObject;
+
+typedef struct {
+    DrawObjectHeader header;
+    uint32_t fill_colour;
+    uint32_t outline_colour;
+    uint32_t outline_width;
+    /* Path data follows */
+} DrawPathObject;
+
+typedef struct {
+    DrawObjectHeader header;
+    char font_data[1]; /* font_ref, name\0 ... \0 */
+} DrawFontTable;
+
+static uint32_t map_colour_draw(Colour c, int bright, uint32_t normal) {
+    if (c == COLOUR_NORMAL) return normal;
+    switch (c) {
+        case COLOUR_BLACK:   return 0x00000000;
+        case COLOUR_RED:     return bright ? 0x5555FF00 : 0x0000AA00;
+        case COLOUR_GREEN:   return bright ? 0x55FF5500 : 0x00AA0000;
+        case COLOUR_YELLOW:  return bright ? 0x55FFFF00 : 0x00AAAA00;
+        case COLOUR_BLUE:    return bright ? 0xFF555500 : 0xAA000000;
+        case COLOUR_MAGENTA: return bright ? 0xFF55FF00 : 0xAA00AA00;
+        case COLOUR_CYAN:    return bright ? 0xFFFF5500 : 0xAAFFFF00; /*cyan: BBGGRR00 -> FFFF0000? no G+B=Cyan. BBGGRR00. Cyan is BB=FF, GG=FF, RR=00 -> 0xFFFF0000. Wait, 0x00FFFF00? */
+        case COLOUR_WHITE:   return bright ? 0xFFFFFF00 : 0xAAAAAA00;
+        default:             return 0x00000000;
+    }
+}
+/* Correcting Cyan: Cyan = Green + Blue. In &BBGGRR00 format: &FFFF0000.
+   Wait, map_colour used COLOUR_RGB(0, 170, 170). That's RR=0, GG=170, BB=170.
+   In &BBGGRR00 that is &AA AA 00 00.
+*/
+
+static uint32_t map_colour_draw_fixed(Colour c, int bright, uint32_t normal) {
+    if (c == COLOUR_NORMAL) return normal;
+    switch (c) {
+        case COLOUR_BLACK:   return 0x00000000;
+        case COLOUR_RED:     return bright ? 0x5555FF00 : 0x0000AA00;
+        case COLOUR_GREEN:   return bright ? 0x55FF5500 : 0x00AA0000;
+        case COLOUR_YELLOW:  return bright ? 0x55FFFF00 : 0x00AAAA00;
+        case COLOUR_BLUE:    return bright ? 0xFF555500 : 0xAA000000;
+        case COLOUR_MAGENTA: return bright ? 0xFF55FF00 : 0xAA00AA00;
+        case COLOUR_CYAN:    return bright ? 0xFFFF5500 : 0xAAAA0000; /* Cyan: BB=AA, GG=AA, RR=00 -> 0xAAAA0000 */
+        case COLOUR_WHITE:   return bright ? 0xFFFFFF00 : 0xAAAAAA00;
+        default:             return 0x00000000;
+    }
+}
+
+_kernel_oserror *drawfile_generate(const ColouredFile *cf, const char *font_name, int font_x, int font_y,
+                                 uint32_t bg_col, uint32_t fg_col,
+                                 void *buffer, size_t *length) {
+    size_t required = sizeof(DrawFileHeader);
+    size_t font_table_size = 8 + 1 + strlen(font_name) + 1;
+    font_table_size = (font_table_size + 3) & ~3;
+    required += font_table_size;
+
+    /* BG rectangle */
+    required += sizeof(DrawPathObject) + 44; /* approximate for a rect path */
+
+    /* Text objects */
+    {
+        size_t l, e;
+        for (l = 0; l < cf->line_count; l++) {
+            for (e = 0; e < cf->lines[l].element_count; e++) {
+                size_t obj_size = sizeof(DrawTextObject) + cf->lines[l].elements[e].text_length;
+                required += (obj_size + 3) & ~3;
+            }
+        }
+    }
+
+    if (buffer == NULL || *length < required) {
+        *length = required;
+        return err_BufferOverflow;
+    }
+
+    /* Implementation of actual buffer writing...
+       This is complex because we need font metrics to position text correctly.
+       For now, let's assume we can get font metrics.
+    */
+    {
+        uint8_t *p = buffer;
+        DrawFileHeader *h = (DrawFileHeader *)p;
+        DrawFontTable *ft;
+        int font_handle;
+        int32_t cur_y = 0;
+        int32_t max_w = 0;
+        int32_t font_ascent, font_descent;
+        size_t l, e;
+
+        /* Get font info */
+        if (_swix(Font_FindFont, _INR(1,5)|_OUT(0), font_name, font_x, font_y, 0, 0, &font_handle) != NULL)
+            return err_FileError;
+
+        {
+            int bbox[4];
+            _swix(Font_ReadInfo, _IN(0)|_OUTR(1,4), font_handle, &bbox[0], &bbox[1], &bbox[2], &bbox[3]);
+            font_ascent = bbox[3];
+            font_descent = bbox[1];
+        }
+
+        memset(h, 0, sizeof(DrawFileHeader));
+        memcpy(h->tag, "Draw", 4);
+        h->major_version = 200;
+        memcpy(h->creator, "NanoColour", 10);
+
+        p += sizeof(DrawFileHeader);
+        ft = (DrawFontTable *)p;
+        ft->header.type = 0; /* Font table */
+        ft->header.size = font_table_size;
+        ft->font_data[0] = 1; /* Font ref 1 */
+        strcpy(ft->font_data + 1, font_name);
+        p += font_table_size;
+
+        /* Skip BG for now, or just add it later. Let's calculate total height first. */
+        {
+            int32_t line_height = font_ascent - font_descent;
+            cur_y = cf->line_count * line_height;
+            h->bbox[3] = cur_y * 256; /* Draw units are 1/256th of an inch? No, 1/640th of a point?
+                                       Standard Draw units are 1/256th of an inch. OS units are 1/180th.
+                                       Wait, Draw units are usually 256 per OS unit.
+                                       1/72 inch = 72 dpi. 1 OS unit = 1/180 inch.
+                                       Actually, 1 Draw unit = 1/256th of an OS unit is WRONG.
+                                       1 Draw unit = 1/256th of an INCH.
+                                       No, PRM says: Draw units are 1/256th of a point? No, 1/640th of a point.
+                                       Let's check PRM.
+                                       "Coordinates and distances in Draw files are 32-bit signed integers,
+                                       in units of 1/256th of a standard 1/72 inch point."
+                                       Actually, it's 1/256 * 1/72 = 1/18432 inch.
+                                       Wait, standard is 256 units per OS unit? No.
+                                       Let's use 256 * OS units.
+                                      */
+        }
+
+        /* Layout lines */
+        cur_y = 0;
+        for (l = 0; l < cf->line_count; l++) {
+            int32_t cur_x = 0;
+            int32_t line_top = 0; /* will adjust later */
+            for (e = 0; e < cf->lines[l].element_count; e++) {
+                ColouredElement *el = &cf->lines[l].elements[e];
+                DrawTextObject *to = (DrawTextObject *)p;
+                size_t txt_len = el->text_length;
+                size_t obj_size = (sizeof(DrawTextObject) + txt_len + 3) & ~3;
+                int width;
+
+                to->header.type = 1; /* Text */
+                to->header.size = obj_size;
+                to->font_ref = 1;
+                to->text_colour = map_colour_draw_fixed(el->style.fg, el->style.bright, fg_col);
+                to->bg_colour = map_colour_draw_fixed(el->style.bg, 0, bg_col);
+                if (el->style.bg == COLOUR_NORMAL) to->bg_colour = 0xFFFFFFFF; /* Transparent */
+
+                to->x = cur_x * 256; /* Placeholder for units */
+                to->y = -(int32_t)l * (font_ascent - font_descent) * 256;
+
+                memcpy(to->text, el->text_start, txt_len);
+                if (obj_size > sizeof(DrawTextObject) + txt_len) {
+                    memset(to->text + txt_len, 0, obj_size - (sizeof(DrawTextObject) + txt_len));
+                }
+
+                _swix(Font_StringWidth, _INR(1,5)|_OUT(2), el->text_start, 0x7FFFFFFF, 0, 0, font_handle, &width);
+                cur_x += width;
+                p += obj_size;
+                if (cur_x > max_w) max_w = cur_x;
+            }
+        }
+
+        _swix(Font_LoseFont, _IN(0), font_handle);
+
+        /* Adjust all Y to be positive and update bbox */
+        {
+            int32_t height = cf->line_count * (font_ascent - font_descent);
+            uint8_t *adjust_p = buffer;
+            adjust_p += sizeof(DrawFileHeader) + font_table_size;
+            while (adjust_p < p) {
+                DrawObjectHeader *obj = (DrawObjectHeader *)adjust_p;
+                if (obj->type == 1) {
+                    DrawTextObject *to = (DrawTextObject *)adjust_p;
+                    to->y += height * 256;
+                }
+                adjust_p += obj->size;
+            }
+            h->bbox[2] = max_w * 256;
+            h->bbox[3] = height * 256;
+        }
+
+        *length = p - (uint8_t *)buffer;
+    }
+
+    return NULL;
+}

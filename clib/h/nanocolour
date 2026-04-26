@@ -62,6 +62,12 @@ typedef enum {
 
 typedef struct Syntax_s Syntax;
 
+typedef struct {
+    char *name;
+    char *syntax_regex;
+    char *magic_regex;
+} SyntaxInfo;
+
 /* Function prototypes */
 
 /**
@@ -75,6 +81,12 @@ NanoStatus nanocolour_read_file(const char *filename, char **contents_out, size_
  * Includes are ignored.
  */
 NanoStatus nanocolour_parse_rc(const char *filename, Syntax **syntax_out);
+
+/**
+ * Gets syntax and magic regexes from a nanorc file without full parsing.
+ * The strings in SyntaxInfo must be freed by the caller.
+ */
+NanoStatus nanocolour_get_syntax_info(const char *filename, SyntaxInfo *info_out);
 
 /**
  * Colours a file content using the provided syntax rules.
