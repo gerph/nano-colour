@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #ifdef FORTIFY
 #include "Fortify/fortify.h"
@@ -14,6 +15,35 @@
 
 #include "nanocolour.h"
 #include "nanorc_internal.h"
+
+typedef uint16_t PackedStyle;
+
+#define PACK_STYLE(s) (((uint16_t)(s).fg) | (((uint16_t)(s).bg) << 4) | (((uint16_t)(s).bright) << 8))
+
+static void unpack_style(PackedStyle p, Style *s) {
+    s->fg = (Colour)(p & 0xF);
+    s->bg = (Colour)((p >> 4) & 0xF);
+    s->bright = (p >> 8) & 0x1;
+}
+
+typedef struct {
+    ColouredElement *elements;
+    size_t capacity;
+    size_t used;
+} ElementPool;
+
+static int grow_pool(ElementPool *pool, size_t needed) {
+    if (pool->used + needed > pool->capacity) {
+        size_t new_cap = pool->capacity ? pool->capacity * 2 : 256;
+        ColouredElement *new_elements;
+        while (new_cap < pool->used + needed) new_cap *= 2;
+        new_elements = realloc(pool->elements, new_cap * sizeof(ColouredElement));
+        if (!new_elements) return 0;
+        pool->elements = new_elements;
+        pool->capacity = new_cap;
+    }
+    return 1;
+}
 
 NanoStatus nanocolour_read_file(const char *filename, char **contents_out, size_t *length_out) {
     FILE *f = fopen(filename, "rb");
@@ -56,9 +86,15 @@ NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *s
     char *p;
     char *end;
     SyntaxRuleInternal *current_multi_rule = NULL;
+    PackedStyle default_packed;
     Style default_style;
     size_t l;
     NanoStatus status = NANO_OK;
+    char *line_text = NULL;
+    size_t line_text_cap = 0;
+    PackedStyle *styles = NULL;
+    size_t styles_cap = 0;
+    ElementPool pool = {NULL, 0, 0};
 
     if (!file_out || !syntax) return NANO_ERROR_INVALID_ARG;
     *file_out = NULL;
@@ -71,6 +107,7 @@ NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *s
     default_style.fg = COLOUR_NORMAL;
     default_style.bg = COLOUR_NORMAL;
     default_style.bright = 0;
+    default_packed = PACK_STYLE(default_style);
 
     for (i = 0; i < length; i++) {
         if (contents[i] == '\n') line_count++;
@@ -103,38 +140,52 @@ NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *s
 
     for (l = 0; l < line_count; l++) {
         size_t len = line_lens[l];
-        char *line_text = malloc(len + 1);
-        Style *styles = malloc(len * sizeof(Style));
         size_t r_idx;
 
-        if (!line_text || !styles) {
-            free(line_text); free(styles);
-            status = NANO_ERROR_NOMEM; goto error;
+        if (len + 1 > line_text_cap) {
+            size_t new_cap = line_text_cap ? line_text_cap * 2 : 128;
+            char *new_text;
+            while (new_cap < len + 1) new_cap *= 2;
+            new_text = realloc(line_text, new_cap);
+            if (!new_text) { status = NANO_ERROR_NOMEM; goto error; }
+            line_text = new_text;
+            line_text_cap = new_cap;
+        }
+        if (len > styles_cap) {
+            size_t new_cap = styles_cap ? styles_cap * 2 : 128;
+            PackedStyle *new_styles;
+            while (new_cap < len) new_cap *= 2;
+            new_styles = realloc(styles, new_cap * sizeof(PackedStyle));
+            if (!new_styles) { status = NANO_ERROR_NOMEM; goto error; }
+            styles = new_styles;
+            styles_cap = new_cap;
         }
 
         memcpy(line_text, line_ptrs[l], len);
         line_text[len] = '\0';
 
-        for (i = 0; i < len; i++) styles[i] = default_style;
+        for (i = 0; i < len; i++) styles[i] = default_packed;
 
         if (current_multi_rule) {
             regmatch_t pmatch;
-            for (i = 0; i < len; i++) styles[i] = current_multi_rule->style;
+            PackedStyle multi_packed = PACK_STYLE(current_multi_rule->style);
+            for (i = 0; i < len; i++) styles[i] = multi_packed;
             if (regexec(&current_multi_rule->re_end, line_text, 1, &pmatch, 0) == 0) {
-                for (i = pmatch.rm_eo; i < len; i++) styles[i] = default_style;
+                for (i = pmatch.rm_eo; i < len; i++) styles[i] = default_packed;
                 current_multi_rule = NULL;
             }
         }
 
         for (r_idx = 0; r_idx < si->rule_count; r_idx++) {
             SyntaxRuleInternal *rule = &si->rules[r_idx];
+            PackedStyle rule_packed = PACK_STYLE(rule->style);
             if (rule->type == RULE_SINGLE) {
                 regmatch_t pmatch;
                 int offset = 0;
                 while (regexec(&rule->re_start, line_text + offset, 1, &pmatch, 0) == 0) {
                     int start = offset + (int)pmatch.rm_so;
                     int end_m = offset + (int)pmatch.rm_eo;
-                    for (i = (size_t)start; i < (size_t)end_m; i++) styles[i] = rule->style;
+                    for (i = (size_t)start; i < (size_t)end_m; i++) styles[i] = rule_packed;
                     if (pmatch.rm_so == pmatch.rm_eo) offset++;
                     else offset = end_m;
                     if (offset >= (int)len) break;
@@ -146,13 +197,13 @@ NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *s
                     int start = offset + pmatch_s.rm_so;
                     int start_end = offset + pmatch_s.rm_eo;
                     current_multi_rule = rule;
-                    for (i = (size_t)start; i < len; i++) styles[i] = rule->style;
+                    for (i = (size_t)start; i < len; i++) styles[i] = rule_packed;
                     
                     {
                         regmatch_t pmatch_e;
                         if (regexec(&rule->re_end, line_text + start_end, 1, &pmatch_e, 0) == 0) {
                             int end_m = start_end + pmatch_e.rm_eo;
-                            for (i = (size_t)end_m; i < len; i++) styles[i] = default_style;
+                            for (i = (size_t)end_m; i < len; i++) styles[i] = default_packed;
                             current_multi_rule = NULL;
                             offset = end_m;
                         } else {
@@ -167,57 +218,64 @@ NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *s
         if (len > 0) {
             size_t elem_count = 0;
             for (i = 0; i < len; i++) {
-                if (i == 0 || memcmp(&styles[i], &styles[i-1], sizeof(Style)) != 0) {
+                if (i == 0 || styles[i] != styles[i-1]) {
                     elem_count++;
                 }
             }
+            if (!grow_pool(&pool, elem_count)) { status = NANO_ERROR_NOMEM; goto error; }
+            
             cf->lines[l].element_count = elem_count;
-            cf->lines[l].elements = calloc(elem_count, sizeof(ColouredElement));
-            if (!cf->lines[l].elements) {
-                free(line_text); free(styles);
-                status = NANO_ERROR_NOMEM; goto error;
-            }
+            /* Store offset temporarily. +1 to avoid NULL if used is 0. */
+            cf->lines[l].elements = (ColouredElement *)(pool.used + 1);
             {
                 size_t e = 0;
                 for (i = 0; i < len; i++) {
-                    if (i == 0 || memcmp(&styles[i], &styles[i-1], sizeof(Style)) != 0) {
-                        cf->lines[l].elements[e].x_pos = i;
-                        cf->lines[l].elements[e].text_start = line_ptrs[l] + i;
-                        cf->lines[l].elements[e].style = styles[i];
+                    if (i == 0 || styles[i] != styles[i-1]) {
+                        ColouredElement *el = &pool.elements[pool.used + e];
+                        el->x_pos = i;
+                        el->text_start = line_ptrs[l] + i;
+                        unpack_style(styles[i], &el->style);
                         if (e > 0) {
-                            cf->lines[l].elements[e-1].text_length = i - cf->lines[l].elements[e-1].x_pos;
+                            pool.elements[pool.used + e - 1].text_length = i - pool.elements[pool.used + e - 1].x_pos;
                         }
                         e++;
                     }
                 }
-                cf->lines[l].elements[e-1].text_length = len - cf->lines[l].elements[e-1].x_pos;
+                pool.elements[pool.used + e - 1].text_length = len - pool.elements[pool.used + e - 1].x_pos;
+                pool.used += elem_count;
             }
         }
+    }
 
-        free(line_text);
-        free(styles);
+    /* Fix up pointers after all lines processed and pool is final */
+    for (l = 0; l < line_count; l++) {
+        if (cf->lines[l].elements) {
+            size_t offset = (size_t)cf->lines[l].elements - 1;
+            cf->lines[l].elements = &pool.elements[offset];
+        }
     }
 
     free(line_ptrs);
     free(line_lens);
+    free(line_text);
+    free(styles);
+    cf->element_pool = pool.elements;
     *file_out = cf;
     return NANO_OK;
 
 error:
     free(line_ptrs);
     free(line_lens);
+    free(line_text);
+    free(styles);
+    free(pool.elements);
     nanocolour_free_coloured_file(cf);
     return status;
 }
 
 void nanocolour_free_coloured_file(ColouredFile *file) {
-    size_t i;
     if (!file) return;
-    if (file->lines) {
-        for (i = 0; i < file->line_count; i++) {
-            free(file->lines[i].elements);
-        }
-        free(file->lines);
-    }
+    free(file->lines);
+    free(file->element_pool);
     free(file);
 }

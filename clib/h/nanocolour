@@ -53,6 +53,7 @@ typedef struct {
     size_t length;
     size_t line_count;
     ColouredLine *lines;
+    ColouredElement *element_pool; /* Pool for all elements in the file */
 } ColouredFile;
 
 typedef enum {
