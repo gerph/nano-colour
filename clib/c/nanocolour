@@ -103,13 +103,23 @@ NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *s
 
     for (l = 0; l < line_count; l++) {
         size_t len = line_lens[l];
-        char *line_text = malloc(len + 1);
-        Style *styles = malloc(len * sizeof(Style));
+        static char *line_text = NULL;
+        static size_t line_text_size = 0;
+        static Style *styles = NULL;
+        static size_t styles_size = 0;
         size_t r_idx;
 
-        if (!line_text || !styles) {
-            free(line_text); free(styles);
-            status = NANO_ERROR_NOMEM; goto error;
+        if (len + 1 > line_text_size) {
+            char *new_text = realloc(line_text, len + 1);
+            if (!new_text) { status = NANO_ERROR_NOMEM; goto error; }
+            line_text = new_text;
+            line_text_size = len + 1;
+        }
+        if (len > styles_size) {
+            Style *new_styles = realloc(styles, len * sizeof(Style));
+            if (!new_styles) { status = NANO_ERROR_NOMEM; goto error; }
+            styles = new_styles;
+            styles_size = len;
         }
 
         memcpy(line_text, line_ptrs[l], len);
@@ -193,9 +203,6 @@ NanoStatus nanocolour_colour_file(char *contents, size_t length, const Syntax *s
                 cf->lines[l].elements[e-1].text_length = len - cf->lines[l].elements[e-1].x_pos;
             }
         }
-
-        free(line_text);
-        free(styles);
     }
 
     free(line_ptrs);

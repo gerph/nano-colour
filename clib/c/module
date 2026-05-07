@@ -198,22 +198,58 @@ _kernel_oserror *Mod_SWI(int swi, _kernel_swi_regs *r, void *pw) {
             size_t buf_len = 0;
             void *buffer;
             _kernel_oserror *err;
-            err = do_todrawbuffer(NULL, &buf_len, (char *)r->r[1], (char *)r->r[2], (char *)r->r[3], r->r[4], r->r[5], (uint32_t)r->r[6], (uint32_t)r->r[7]);
-            if (err != err_BufferOverflow) return err;
-            buffer = malloc(buf_len);
-            if (!buffer) return err_NoMemory;
-            err = do_todrawbuffer(buffer, &buf_len, (char *)r->r[1], (char *)r->r[2], (char *)r->r[3], r->r[4], r->r[5], (uint32_t)r->r[6], (uint32_t)r->r[7]);
-            if (!err) {
-                FILE *f = fopen((char *)r->r[0], "wb");
-                if (f) {
-                    fwrite(buffer, 1, buf_len, f);
-                    fclose(f);
-                    _swix(OS_File, _INR(0,2), 18, (char *)r->r[0], 0xAFF);
-                } else {
-                    err = err_FileError;
+            ColouredFile *cf;
+            char *contents;
+            size_t length;
+            Syntax *syntax = NULL;
+            int is_auto = 0;
+
+            if (r->r[2] != 0 && *(char *)r->r[2] != '\0') {
+                NanoStatus status = nanocolour_parse_rc((char *)r->r[2], &syntax);
+                if (status != NANO_OK) return status_to_oserror(status);
+            } else {
+                err = syntax_find_for_file((char *)r->r[1], &syntax);
+                if (err) return err;
+                is_auto = 1;
+            }
+
+            {
+                NanoStatus status = nanocolour_read_file((char *)r->r[1], &contents, &length);
+                if (status != NANO_OK) {
+                    if (!is_auto) nanocolour_free_syntax(syntax);
+                    return status_to_oserror(status);
+                }
+
+                status = nanocolour_colour_file(contents, length, syntax, &cf);
+                if (!is_auto) nanocolour_free_syntax(syntax);
+                if (status != NANO_OK) {
+                    free(contents);
+                    return status_to_oserror(status);
                 }
             }
-            free(buffer);
+
+            err = drawfile_generate(cf, (char *)r->r[3], r->r[4], r->r[5], (uint32_t)r->r[6], (uint32_t)r->r[7], NULL, &buf_len);
+            if (err == err_BufferOverflow) {
+                buffer = malloc(buf_len);
+                if (!buffer) {
+                    err = err_NoMemory;
+                } else {
+                    err = drawfile_generate(cf, (char *)r->r[3], r->r[4], r->r[5], (uint32_t)r->r[6], (uint32_t)r->r[7], buffer, &buf_len);
+                    if (!err) {
+                        FILE *f = fopen((char *)r->r[0], "wb");
+                        if (f) {
+                            fwrite(buffer, 1, buf_len, f);
+                            fclose(f);
+                            _swix(OS_File, _INR(0,2), 18, (char *)r->r[0], 0xAFF);
+                        } else {
+                            err = err_FileError;
+                        }
+                    }
+                    free(buffer);
+                }
+            }
+            nanocolour_free_coloured_file(cf);
+            free(contents);
             return err;
         }
 

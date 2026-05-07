@@ -19,6 +19,7 @@ typedef struct {
     int32_t height;
     int32_t ascent;
     int32_t width;
+    int32_t *element_widths;
 } LineRenderInfo;
 
 struct NanoRender_s {
@@ -67,11 +68,17 @@ static bool calculate_sizes(NanoRender *r) {
         int32_t line_descent = 0;
         size_t j;
         
+        if (line->element_count > 0) {
+            r->line_info[i].element_widths = realloc(r->line_info[i].element_widths, line->element_count * sizeof(int32_t));
+            if (!r->line_info[i].element_widths) return false;
+        }
+
         for (j = 0; j < line->element_count; j++) {
             const ColouredElement *el = &line->elements[j];
             stringbounds_t b;
             r->gc->text_getstringsize(r->gc, r->font, &b, 0x7FFFFFFF, 
                                       el->text_start, el->text_length, GCONTEXT_NOSPLIT);
+            r->line_info[i].element_widths[j] = b.xoffset;
             line_w += b.xoffset;
             if (b.ascent > line_ascent) line_ascent = b.ascent;
             if (b.descent < line_descent) line_descent = b.descent;
@@ -110,7 +117,13 @@ NanoRender *nanocolour_render_create(const ColouredFile *file, gcontext_t *gc, f
 
 void nanocolour_render_free(NanoRender *render) {
     if (render) {
-        free(render->line_info);
+        if (render->line_info) {
+            size_t i;
+            for (i = 0; i < render->file->line_count; i++) {
+                free(render->line_info[i].element_widths);
+            }
+            free(render->line_info);
+        }
         free(render);
     }
 }
@@ -159,12 +172,7 @@ void nanocolour_render_draw(NanoRender *render, int x, int y, colour_t bg_colour
                                    bg, fg, 
                                    el->text_start, el->text_length);
             
-            {
-                stringbounds_t b;
-                render->gc->text_getstringsize(render->gc, render->font, &b, 0x7FFFFFFF,
-                                               el->text_start, el->text_length, GCONTEXT_NOSPLIT);
-                cur_x += b.xoffset;
-            }
+            cur_x += info->element_widths[j];
         }
     }
 }
