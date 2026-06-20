@@ -1,0 +1,41 @@
+## PRM-in-XML files
+
+syntax "PRM-in-XML" "(^|/)(prminxml|prm-in-xml)/.*\.xml$"
+header "<!DOCTYPE riscos-prm PUBLIC .*PRM documentation"
+header "<riscos-prm>"
+comment "<!--|-->"
+
+## Start from plain white text on a black background.
+color white "^.+$"
+
+## Tag bodies and generic element names.
+color magenta start="<" end=">"
+color magenta "<[/]?[A-Za-z][A-Za-z0-9-]*([[:space:]>])"
+
+## Structural sections and grouping elements: cyan.
+color cyan "<[/]?(riscos-prm|chapter|section|subsection|subsubsection|category|meta|history|revision|maintainer|disclaimer|related)([[:space:]>])"
+
+## Definition and interface elements: yellow.
+color yellow "<[/]?(swi-definition|service-definition|upcall-definition|message-definition|command-definition|sysvar-definition|error-definition|entry-definition|vector-definition|vdu-definition|tboxmessage-definition|tboxmethod-definition|entry|exit|use|example|compatibility|syntax|parameter|declaration)([[:space:]>])"
+
+## Tables, references and inline semantic markup: green.
+color green "<[/]?(p|list|item|reference|register-use|bitfield-table|bit|definition-table|definition|value-table|value|offset-table|offset|message-table|message|version-table|version|extended-example|command|userinput|systemoutput|filename|sysvar|menuoption|actionbutton|fixme|image|br|optional|alternates|switch|userreplace|text|bnf|rule-def|rule-use|literal|character|group|comment)([[:space:]>])"
+
+## Comments, XML declaration and doctype.
+color green start="<!--" end="-->"
+color green start="<\?" end="\?>"
+color green start="<!DOCTYPE" end=">"
+
+## Attribute names share one colour across the format.
+color brightcyan "[A-Za-z_:][-A-Za-z0-9._:]*(?==)"
+
+## Attribute values.
+color brightblue "="(\\.|[^"])*""
+color brightblue "='(\\.|[^'])*'"
+
+## Tag punctuation and entities.
+color white "(=|</?|/?>)"
+color red "&[^;[:space:]]*;"
+
+## Trailing spaces.
+color ,red "[[:space:]]+$"
