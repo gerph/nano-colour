@@ -79,7 +79,8 @@ sub get_ansi {
         
         my $fg_code = $color_map{lc($fg)};
         if (defined $fg_code) {
-            $ansi .= "\e[" . ($bright ? "1;" : "") . (30 + $fg_code) . "m";
+            my $base = $bright ? 90 : 30;
+            $ansi .= "\e[" . ($base + $fg_code) . "m";
         }
     }
     

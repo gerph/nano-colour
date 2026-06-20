@@ -13,13 +13,13 @@ color magenta start="<" end=">"
 color magenta "<[/]?[A-Za-z][A-Za-z0-9-]*([[:space:]>])"
 
 ## Structural sections and grouping elements: cyan.
-color cyan "<[/]?(riscos-prm|chapter|section|subsection|subsubsection|category|meta|history|revision|maintainer|disclaimer|related)([[:space:]>])"
+color brightcyan "<[/]?(riscos-prm|chapter|section|subsection|subsubsection|category|meta|history|revision|maintainer|disclaimer|related)([[:space:]>])"
 
 ## Definition and interface elements: yellow.
-color yellow "<[/]?(swi-definition|service-definition|upcall-definition|message-definition|command-definition|sysvar-definition|error-definition|entry-definition|vector-definition|vdu-definition|tboxmessage-definition|tboxmethod-definition|entry|exit|use|example|compatibility|syntax|parameter|declaration)([[:space:]>])"
+color brightyellow "<[/]?(swi-definition|service-definition|upcall-definition|message-definition|command-definition|sysvar-definition|error-definition|entry-definition|vector-definition|vdu-definition|tboxmessage-definition|tboxmethod-definition|entry|exit|use|example|compatibility|syntax|parameter|declaration)([[:space:]>])"
 
 ## Tables, references and inline semantic markup: red.
-color red "<[/]?(p|list|item|reference|register-use|bitfield-table|bit|definition-table|definition|value-table|value|offset-table|offset|message-table|message|version-table|version|extended-example|command|userinput|systemoutput|filename|sysvar|menuoption|actionbutton|fixme|image|br|optional|alternates|switch|userreplace|text|bnf|rule-def|rule-use|literal|character|group|comment)([[:space:]>])"
+color brightred "<[/]?(p|list|item|reference|register-use|bitfield-table|bit|definition-table|definition|value-table|value|offset-table|offset|message-table|message|version-table|version|extended-example|command|userinput|systemoutput|filename|sysvar|menuoption|actionbutton|fixme|image|br|optional|alternates|switch|userreplace|text|bnf|rule-def|rule-use|literal|character|group|comment)([[:space:]>])"
 
 ## Comments, XML declaration and doctype.
 color green start="<!--" end="-->"
@@ -27,7 +27,7 @@ color green start="<\?" end="\?>"
 color green start="<!DOCTYPE" end=">"
 
 ## Attribute names share one colour across the format.
-color brightcyan "\<[A-Za-z_:][-A-Za-z0-9._:]*="
+color cyan "\<[A-Za-z_:][-A-Za-z0-9._:]*="
 
 ## Attribute values.
 color brightblue "="(\\.|[^"])*""
