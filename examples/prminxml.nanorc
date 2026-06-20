@@ -35,7 +35,7 @@ color brightblue "='(\\.|[^'])*'"
 
 ## Tag punctuation and entities.
 color white "(=|</?|/?>)"
-color red "&[^;[:space:]]*;"
+color magenta "&[^;[:space:]]*;"
 
 ## Trailing spaces.
 color ,red "[[:space:]]+$"

@@ -1,0 +1,265 @@
+<?xml version="1.0"?>
+<!DOCTYPE riscos-prm PUBLIC "-//Gerph//DTD PRM documentation 1.03//EN"
+                            "http://gerph.org/dtd/103/prm.dtd">
+
+<riscos-prm>
+<chapter title="nano-colour">
+<section title="Introduction and Overview">
+<p>
+<userinput>nano-colour</userinput> is a command-line syntax highlighter which reads nano
+syntax definition files and writes ANSI-coloured text to standard output. It is intended
+for terminal viewing, filters and pipeline use where nano-style syntax colouring is
+useful outside the editor itself.
+</p>
+<p>
+The command selects a syntax either explicitly or by matching the target file against
+the <userinput>syntax</userinput> and <userinput>header</userinput> rules present in
+nanorc files. It then applies the colour rules to the input stream and emits ordinary
+text with ANSI escape sequences inserted where colour changes are required.
+</p>
+</section>
+
+<section title="Technical Details">
+<p>
+The command reads nanorc definitions from either the path supplied on the command line
+or the <userinput>NANOCOLOUR_DIR</userinput> environment variable. The supplied path may
+identify a single nanorc file or a directory containing files whose names end in
+<userinput>.nanorc</userinput>, together with a file named <userinput>nanorc</userinput>.
+</p>
+
+<subsection title="Syntax selection">
+<p>
+If <userinput>-s</userinput> or <userinput>--syntax</userinput> is supplied, the named
+syntax is used directly. Otherwise the command attempts automatic selection in two
+stages.
+</p>
+<p>
+First, the path supplied as the target file is matched against the regular expressions
+from each <userinput>syntax</userinput> command. If no match is found, the command reads
+the first line of the target file and compares it with each
+<userinput>header</userinput> expression. The first matching syntax is selected.
+</p>
+<p>
+When no syntax is identified, normal text is copied to standard output unchanged.
+However, if <userinput>--supported</userinput> is used, the command exits with failure
+instead of producing output.
+</p>
+</subsection>
+
+<subsection title="Input handling">
+<p>
+The target file may be a host file path or <userinput>-</userinput> to read from
+standard input. Automatic syntax detection depends on the supplied file path and, for
+header matching, on the first line of a real file. When reading from standard input,
+explicit syntax selection is therefore the normal mode of operation.
+</p>
+<p>
+If no target file is supplied, the command is only valid when either
+<userinput>--supported</userinput> is being used or an explicit syntax has been
+requested. In the latter case input is read from standard input.
+</p>
+</subsection>
+
+<subsection title="Nanorc syntax and colours">
+<p>
+Nanorc files may include other files through the <userinput>include</userinput>
+directive. Relative include paths are resolved relative to the including file, and a
+leading <userinput>~</userinput> is expanded using the caller's
+<userinput>HOME</userinput> environment variable.
+</p>
+<p>
+The command recognises the subset of nanorc syntax that it needs for syntax discovery
+and colour application.
+</p>
+<p>
+<definition-table head-name="Directive" head-value="Meaning">
+ <definition name="include path">Load another nanorc file. Relative paths are interpreted relative to the file containing the directive.</definition>
+ <definition name="syntax &quot;name&quot; [&quot;fileregex&quot; ...]">Begin a syntax definition named <userinput>name</userinput>. Any following file regular expressions are used for automatic syntax selection.</definition>
+ <definition name="header &quot;regex&quot; ...">Add one or more header-matching expressions for the current syntax. These are compared with the first line of the target file if no file-pattern match succeeds.</definition>
+ <definition name="comment &quot;string&quot;">Accepted in nanorc files, but not used by <userinput>nano-colour</userinput> when colouring output.</definition>
+ <definition name="color colour-spec &quot;regex&quot; ...">Apply the specified colours to each match of the regular expression or expressions.</definition>
+ <definition name="icolor colour-spec &quot;regex&quot; ...">As for <userinput>color</userinput>, but regular-expression matching is case-insensitive.</definition>
+ <definition name="color colour-spec start=&quot;start_re&quot; end=&quot;end_re&quot;">Apply colours from the text matching <userinput>start_re</userinput> until the corresponding match of <userinput>end_re</userinput>, including multi-line ranges.</definition>
+</definition-table>
+</p>
+<p>
+Within regular expressions, nano word-boundary expressions
+<userinput>\&lt;</userinput> and <userinput>\&gt;</userinput> are translated to Perl word
+boundaries before matching.
+</p>
+<p>
+Rules are applied in the order in which they are encountered in the nanorc files. Later
+rules may therefore overwrite colouring applied by earlier rules to the same text.
+</p>
+<p>
+The recognised foreground and background colour names are
+<userinput>black</userinput>, <userinput>red</userinput>,
+<userinput>green</userinput>, <userinput>yellow</userinput>,
+<userinput>blue</userinput>, <userinput>magenta</userinput>,
+<userinput>cyan</userinput>, <userinput>white</userinput> and
+<userinput>normal</userinput>. Foreground colours may additionally use the
+<userinput>bright</userinput> prefix, such as <userinput>brightred</userinput>.
+</p>
+</subsection>
+
+<subsection title="Output and exit behaviour">
+<p>
+The command writes coloured text to standard output and appends a reset sequence at the
+end of every output line, ensuring that terminal attributes do not leak into later
+output.
+</p>
+<p>
+With <userinput>--supported</userinput>, a successful match prints the selected syntax
+name followed by a line break and exits with status 0. If no syntax matches, the command
+produces no output and exits with status 1. Invalid command-line usage causes the
+command to terminate with an error message.
+</p>
+<p>
+<definition-table head-name="Condition" head-value="Result">
+ <definition name="Syntax identified with --supported">The syntax name is written to standard output and the exit status is 0.</definition>
+ <definition name="No syntax identified with --supported">No output is produced and the exit status is 1.</definition>
+ <definition name="Normal colouring mode with matching syntax">The input is written to standard output with ANSI colour sequences.</definition>
+ <definition name="Normal colouring mode with no matching syntax">The input is copied to standard output unchanged.</definition>
+ <definition name="Invalid options or missing nanorc path">Usage text is reported and the command exits with failure.</definition>
+</definition-table>
+</p>
+</subsection>
+</section>
+
+<section title="Commands">
+<command-definition name="nano-colour"
+                    description="Apply nano-style syntax colouring to text">
+<syntax>
+ <text>nano-colour</text>
+ <optional alternates="true">
+  <switch name="s"><userreplace>syntax</userreplace></switch>
+  <switch name="syntax"><userreplace>syntax</userreplace></switch>
+  <switch name="supported"/>
+ </optional>
+ <optional>
+  <userreplace>file</userreplace>
+ </optional>
+ <optional>
+  <userreplace>nanorc_dir</userreplace>
+ </optional>
+</syntax>
+
+<parameter name="file">
+The target file to be highlighted. Use <userinput>-</userinput> to read from standard
+input.
+</parameter>
+
+<parameter name="nanorc_dir">
+Directory containing nanorc files, or a single nanorc file to load. If omitted, the
+path is taken from the <userinput>NANOCOLOUR_DIR</userinput> environment variable.
+</parameter>
+
+<parameter name="syntax" switch="s" switch-alias="syntax">
+Select the named syntax explicitly instead of using automatic detection.
+</parameter>
+
+<parameter switch="supported">
+Test whether the target file matches a known syntax. If it does, print the syntax name
+and exit successfully.
+</parameter>
+
+<use>
+<p>
+This command reads the target text, selects a syntax definition, and writes colourised
+output to standard output. When a syntax is forced, standard input may be coloured even
+when no target filename is available for discovery.
+</p>
+<p>
+The command requires a nanorc source either as the final positional argument or through
+<userinput>NANOCOLOUR_DIR</userinput>. If neither is present, the command reports usage
+information and fails.
+</p>
+</use>
+
+<example>
+<p>
+<extended-example type="shell">
+Highlight a Perl source file using a directory of nanorc files
+<br/><br/>
+The syntax is selected automatically from the target path.
+<br/><br/>
+<userinput>nano-colour myfile.pl examples/</userinput>
+</extended-example>
+</p>
+<p>
+<extended-example type="shell">
+Force a syntax while reading from standard input
+<br/><br/>
+This is the normal way to colour piped input.
+<br/><br/>
+<userinput>cat myfile.pl | nano-colour -s perl - examples/</userinput>
+</extended-example>
+</p>
+<p>
+<extended-example type="shell">
+Check whether a file is supported
+<br/><br/>
+If a syntax matches, its name is printed and the command exits with status 0.
+<br/><br/>
+<userinput>nano-colour --supported prminxml/nanocolourtool.xml examples/</userinput>
+</extended-example>
+</p>
+</example>
+</command-definition>
+</section>
+
+<section title="Examples">
+<subsection title="Using an environment variable">
+<p>
+If the same nanorc directory is used repeatedly, set
+<userinput>NANOCOLOUR_DIR</userinput> once and omit the second positional argument.
+</p>
+<p>
+<extended-example type="shell">
+Using the environment variable for repeated runs
+<br/><br/>
+The command then only needs the file name.
+<br/><br/>
+<userinput>export NANOCOLOUR_DIR=$(pwd)/examples</userinput><br/>
+<userinput>nano-colour README.md</userinput>
+</extended-example>
+</p>
+</subsection>
+
+<subsection title="Highlighting PRM-in-XML">
+<p>
+The supplied PRM-in-XML syntax can match files by directory and name, which is useful
+for documentation trees such as this repository's <filename type="unix">prminxml</filename>
+directory.
+</p>
+<p>
+<extended-example type="shell">
+Colour a PRM-in-XML source file
+<br/><br/>
+The file path is sufficient for automatic syntax selection.
+<br/><br/>
+<userinput>nano-colour prminxml/nanocolourtool.xml examples/</userinput>
+</extended-example>
+</p>
+</subsection>
+</section>
+</chapter>
+
+<meta>
+<maintainer>
+ <email name="Charles Ferguson" address="gerph@gerph.org"/>
+</maintainer>
+<disclaimer>
+ <p>Copyright 2026 Charles Ferguson.</p>
+ <p>This document is supplied under the terms of the MIT licence used by the nano-colour project.</p>
+</disclaimer>
+<history>
+ <revision number="1" date="20 June 2026" author="Gerph" title="Initial version">
+  <change>Created PRM-in-XML documentation for the nano-colour command-line tool.</change>
+ </revision>
+</history>
+<related>
+ <reference type="document" href="../clib/prminxml/nanocolour" name="NanoColour"/>
+</related>
+</meta>
+</riscos-prm>
