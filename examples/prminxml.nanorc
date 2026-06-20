@@ -27,7 +27,7 @@ color green start="<\?" end="\?>"
 color green start="<!DOCTYPE" end=">"
 
 ## Attribute names share one colour across the format.
-color brightcyan "[A-Za-z_:][-A-Za-z0-9._:]*(?==)"
+color brightcyan "\<[A-Za-z_:][-A-Za-z0-9._:]*="
 
 ## Attribute values.
 color brightblue "="(\\.|[^"])*""
