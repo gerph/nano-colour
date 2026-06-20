@@ -18,8 +18,8 @@ color cyan "<[/]?(riscos-prm|chapter|section|subsection|subsubsection|category|m
 ## Definition and interface elements: yellow.
 color yellow "<[/]?(swi-definition|service-definition|upcall-definition|message-definition|command-definition|sysvar-definition|error-definition|entry-definition|vector-definition|vdu-definition|tboxmessage-definition|tboxmethod-definition|entry|exit|use|example|compatibility|syntax|parameter|declaration)([[:space:]>])"
 
-## Tables, references and inline semantic markup: green.
-color green "<[/]?(p|list|item|reference|register-use|bitfield-table|bit|definition-table|definition|value-table|value|offset-table|offset|message-table|message|version-table|version|extended-example|command|userinput|systemoutput|filename|sysvar|menuoption|actionbutton|fixme|image|br|optional|alternates|switch|userreplace|text|bnf|rule-def|rule-use|literal|character|group|comment)([[:space:]>])"
+## Tables, references and inline semantic markup: red.
+color red "<[/]?(p|list|item|reference|register-use|bitfield-table|bit|definition-table|definition|value-table|value|offset-table|offset|message-table|message|version-table|version|extended-example|command|userinput|systemoutput|filename|sysvar|menuoption|actionbutton|fixme|image|br|optional|alternates|switch|userreplace|text|bnf|rule-def|rule-use|literal|character|group|comment)([[:space:]>])"
 
 ## Comments, XML declaration and doctype.
 color green start="<!--" end="-->"
