@@ -79,6 +79,16 @@ Use `--svg` to produce an SVG document with the same colour classes:
 ./nano-colour --svg myfile.pl examples/ > myfile.svg
 ```
 
+## Testing
+
+Run the repository checks with:
+
+```bash
+./tests/run.sh
+```
+
+GitHub Actions runs the same command for pushes and pull requests.
+
 ## Examples
 
 The `examples/` directory contains a variety of `nanorc` definitions for popular formats, including:
