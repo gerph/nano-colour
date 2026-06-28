@@ -38,7 +38,7 @@ color brightcyan "TWIN|TWINO|SUM|BEAT"
 
 ## Function declarations
 color magenta "^ *\d*:*DEF *(PROC|FN) *[`A-Za-z_][`0-9A-Za-z_]*"
-color magenta "^ *\d*:*ENDPROC"
+color magenta "ENDPROC"
 color brightmagenta "(PROC|FN) *[`A-Za-z_][`0-9A-Za-z_]*"
 color magenta "PROC|FN"
 color magenta "^ *\d*:* *="
@@ -60,7 +60,7 @@ color brightblue "["]([^"]*[^\\])?["]"
 
 ## Comments
 color green "(REM|\*\|).*"
-color brightcyan "^ *\d*:* *REM|\*\|)"
+color brightcyan "^ *\d*:* *(REM|\*\|)"
 
 ## Line numbers
 color cyan "^ *[0-9]+"
