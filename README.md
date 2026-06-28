@@ -1,6 +1,6 @@
 # nano-colour - colouring files using nanorc definitions
 
-This repository provides a Perl-based syntax highlighter that leverages `nanorc` configuration files to provide ANSI-colored output in the terminal.
+This repository provides a Perl-based syntax highlighter that leverages `nanorc` configuration files to provide ANSI-coloured output in the terminal, or HTML and SVG output for post-processing.
 
 ## Purpose
 
@@ -14,6 +14,10 @@ The primary tool in this repository is `nano-colour`. It was designed to bring `
   - Multi-line rules (`start="..." end="..."`).
   - Foreground and background color combinations.
   - `bright` color modifiers.
+- **Multiple Output Formats**:
+  - ANSI terminal colouring by default.
+  - HTML with CSS classes for later restyling.
+  - SVG with classed text spans and background rectangles.
 - **Flexible Input**:
   - Highlights files by name.
   - Supports reading from `STDIN` (when syntax is specified).
@@ -57,6 +61,22 @@ When a syntax is forced, `nano-colour` can read from standard input:
 
 ```bash
 cat myfile.pl | ./nano-colour -s perl
+```
+
+### Emitting HTML
+Use `--html` to produce a wrapper `<div>` and a style block. The generated
+output uses classes such as `nanocolour-fg-red` and `nanocolour-bg-blue`, so
+you can restyle the output later:
+
+```bash
+./nano-colour --html myfile.pl examples/ > myfile.html
+```
+
+### Emitting SVG
+Use `--svg` to produce an SVG document with the same colour classes:
+
+```bash
+./nano-colour --svg myfile.pl examples/ > myfile.svg
 ```
 
 ## Examples

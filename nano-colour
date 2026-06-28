@@ -8,20 +8,28 @@ use Getopt::Long;
 
 my $forced_syntax;
 my $check_supported;
+my $output_html;
+my $output_svg;
 GetOptions(
     "syntax|s=s" => \$forced_syntax,
     "supported"  => \$check_supported,
-) or die "Usage: $0 [-s syntax] [--supported] [file] [nanorc_dir]\n";
+    "html"       => \$output_html,
+    "svg"        => \$output_svg,
+) or die "Usage: $0 [-s syntax] [--supported] [--html|--svg] [file] [nanorc_dir]\n";
 
 my $target_file = shift @ARGV;
 my $nanorc_dir  = shift @ARGV // $ENV{NANOCOLOUR_DIR};
 
 if (!$nanorc_dir || (!-d $nanorc_dir && !-f $nanorc_dir)) {
-    die "Usage: $0 [-s syntax] [--supported] [file] [nanorc_dir]\n(Set NANOCOLOUR_DIR or provide a valid nanorc_dir or nanorc file)\n";
+    die "Usage: $0 [-s syntax] [--supported] [--html|--svg] [file] [nanorc_dir]\n(Set NANOCOLOUR_DIR or provide a valid nanorc_dir or nanorc file)\n";
 }
 
 if (!$target_file && !$forced_syntax && !$check_supported) {
-    die "Usage: $0 [-s syntax] [--supported] [file] [nanorc_dir]\n";
+    die "Usage: $0 [-s syntax] [--supported] [--html|--svg] [file] [nanorc_dir]\n";
+}
+
+if ($output_html && $output_svg) {
+    die "Only one of --html or --svg may be specified\n";
 }
 
 my %color_map = (
@@ -35,6 +43,28 @@ my %color_map = (
     white   => 7,
     normal  => 9,
 );
+
+my %html_color_map = (
+    black         => '#000000',
+    red           => '#800000',
+    green         => '#008000',
+    yellow        => '#808000',
+    blue          => '#000080',
+    magenta       => '#800080',
+    cyan          => '#008080',
+    white         => '#c0c0c0',
+    brightblack   => '#808080',
+    brightred     => '#ff0000',
+    brightgreen   => '#00ff00',
+    brightyellow  => '#ffff00',
+    brightblue    => '#0000ff',
+    brightmagenta => '#ff00ff',
+    brightcyan    => '#00ffff',
+    brightwhite   => '#ffffff',
+    normal        => 'inherit',
+);
+
+my %style_defs;
 
 sub get_ansi {
     my ($fg, $bg) = @_;
@@ -60,6 +90,80 @@ sub get_ansi {
         }
     }
     return $ansi;
+}
+
+sub sanitise_name {
+    my ($name) = @_;
+    $name = lc($name // "");
+    $name =~ s/[^a-z0-9]+/-/g;
+    $name =~ s/^-+//;
+    $name =~ s/-+$//;
+    return $name ne "" ? $name : "plain";
+}
+
+sub get_style_key {
+    my ($fg, $bg) = @_;
+    my $norm_fg = defined($fg) ? lc($fg) : "";
+    my $norm_bg = defined($bg) ? lc($bg) : "";
+    return "fg=$norm_fg;bg=$norm_bg";
+}
+
+sub register_style {
+    my ($fg, $bg) = @_;
+    my $style_key = get_style_key($fg, $bg);
+    return $style_defs{$style_key} if exists $style_defs{$style_key};
+
+    my @classes;
+    my %style = (
+        key     => $style_key,
+        fg      => defined($fg) ? lc($fg) : "",
+        bg      => defined($bg) ? lc($bg) : "",
+        ansi    => get_ansi($fg, $bg),
+        classes => "",
+    );
+
+    if (defined $fg && $fg ne "") {
+        push @classes, "nanocolour-fg-" . sanitise_name($fg);
+    }
+    if (defined $bg && $bg ne "") {
+        push @classes, "nanocolour-bg-" . sanitise_name($bg);
+    }
+
+    $style{classes} = join(" ", @classes);
+    $style_defs{$style_key} = \%style;
+    return \%style;
+}
+
+sub html_escape {
+    my ($text) = @_;
+    $text =~ s/&/&amp;/g;
+    $text =~ s/</&lt;/g;
+    $text =~ s/>/&gt;/g;
+    $text =~ s/"/&quot;/g;
+    $text =~ s/'/&#39;/g;
+    return $text;
+}
+
+sub svg_escape {
+    my ($text) = @_;
+    return html_escape($text);
+}
+
+sub emit_css_block {
+    my ($fh, $selector_prefix) = @_;
+    my @colours = grep { $_ ne 'normal' } sort keys %html_color_map;
+
+    print $fh "${selector_prefix}.nanocolour { white-space: pre; font-family: monospace; }\n";
+    foreach my $colour (@colours) {
+        my $css_name = sanitise_name($colour);
+        my $value = $html_color_map{$colour};
+        print $fh "${selector_prefix}.nanocolour-fg-$css_name { color: $value; fill: $value; }\n";
+        print $fh "${selector_prefix}.nanocolour-bg-$css_name { background-color: $value; }\n";
+        print $fh "${selector_prefix}rect.nanocolour-bg-$css_name { fill: $value; }\n";
+    }
+    print $fh "${selector_prefix}.nanocolour-fg-normal { color: inherit; fill: currentColor; }\n";
+    print $fh "${selector_prefix}.nanocolour-bg-normal { background-color: transparent; }\n";
+    print $fh "${selector_prefix}rect.nanocolour-bg-normal { fill: none; }\n";
 }
 
 my @syntax_list;
@@ -106,13 +210,13 @@ sub parse_nanorc {
             
             my ($fg, $bg) = split(/,/, $colors);
             $bg = "" unless defined $bg;
-            my $ansi = get_ansi($fg, $bg);
+            my $style = register_style($fg, $bg);
             
             if ($rest =~ /^start="((?:[^"\\]|\\.)*)"\s+end="((?:[^"\\]|\\.)*)"/) {
                 my ($s, $e) = ($1, $2);
                 $s =~ s/\\</\\b/g; $s =~ s/\\>/\\b/g;
                 $e =~ s/\\</\\b/g; $e =~ s/\\>/\\b/g;
-                push @{$active_syntax->{rules}}, { type => 'multi', start => $s, end => $e, ansi => $ansi, icase => $icase };
+                push @{$active_syntax->{rules}}, { type => 'multi', start => $s, end => $e, style_key => $style->{key}, icase => $icase };
             } else {
                 my @raw = split(/(\s+)/, $rest);
                 while (@raw) {
@@ -128,7 +232,7 @@ sub parse_nanorc {
                     $p =~ s/"$//;
                     next if $p eq "";
                     $p =~ s/\\</\\b/g; $p =~ s/\\>/\\b/g;
-                    push @{$active_syntax->{rules}}, { type => 'single', re => $p, ansi => $ansi, icase => $icase };
+                    push @{$active_syntax->{rules}}, { type => 'single', re => $p, style_key => $style->{key}, icase => $icase };
                 }
             }
         }
@@ -213,32 +317,171 @@ if ($target_file && $target_file ne '-') {
     $in_fh = \*STDIN;
 }
 
+my $default_style = register_style("", "");
+
 if (!$selected_syntax) {
-    # Default to plain text
-    print while <$in_fh>;
+    my @plain_lines;
+    while (my $line = <$in_fh>) {
+        chomp $line;
+        push @plain_lines, {
+            length => length($line),
+            runs   => [ { style_key => $default_style->{key}, text => $line } ],
+        };
+    }
     close($in_fh);
-    exit;
+
+    if ($output_html) {
+        print_html_output(\@plain_lines, "plain");
+    } elsif ($output_svg) {
+        print_svg_output(\@plain_lines, "plain");
+    } else {
+        foreach my $line (@plain_lines) {
+            print $line->{runs}[0]{text}, "\n";
+        }
+    }
+    exit 0;
 }
 
 # Use the pre-parsed rules
 my @rules = @{$selected_syntax->{rules}};
 
 sub paint_range {
-    my ($char_ansi, $start, $end, $ansi) = @_;
+    my ($char_styles, $start, $end, $style_key) = @_;
     return if $end <= $start;
 
     for (my $i = $start; $i < $end; $i++) {
-        $char_ansi->[$i] = $ansi;
+        $char_styles->[$i] = $style_key;
     }
+}
+
+sub line_to_runs {
+    my ($chars, $char_styles) = @_;
+    my @runs;
+    my $count = scalar(@{$chars});
+    return [] if $count == 0;
+
+    my $current_style = $char_styles->[0];
+    my $buffer = "";
+
+    for (my $i = 0; $i < $count; $i++) {
+        if ($char_styles->[$i] ne $current_style) {
+            push @runs, { style_key => $current_style, text => $buffer };
+            $buffer = "";
+            $current_style = $char_styles->[$i];
+        }
+        $buffer .= $chars->[$i];
+    }
+
+    push @runs, { style_key => $current_style, text => $buffer };
+    return \@runs;
+}
+
+sub print_ansi_output {
+    my ($lines) = @_;
+
+    foreach my $line (@{$lines}) {
+        my $last_ansi = "";
+        foreach my $run (@{$line->{runs}}) {
+            my $style = $style_defs{$run->{style_key}};
+            if ($style->{ansi} ne $last_ansi) {
+                print $style->{ansi};
+                $last_ansi = $style->{ansi};
+            }
+            print $run->{text};
+        }
+        print "\e[0m\n";
+    }
+}
+
+sub print_html_output {
+    my ($lines, $syntax_name) = @_;
+    my $syntax_class = "nanocolour-" . sanitise_name($syntax_name);
+
+    print "<style>\n";
+    emit_css_block(\*STDOUT, "");
+    print "</style>\n";
+    print "<div class='nanocolour $syntax_class'>\n";
+    foreach my $line (@{$lines}) {
+        foreach my $run (@{$line->{runs}}) {
+            my $style = $style_defs{$run->{style_key}};
+            my $text = html_escape($run->{text});
+            if ($style->{classes} ne "") {
+                print "<span class='$style->{classes}'>$text</span>";
+            } else {
+                print $text;
+            }
+        }
+        print "\n";
+    }
+    print "</div>\n";
+}
+
+sub print_svg_output {
+    my ($lines, $syntax_name) = @_;
+    my $syntax_class = "nanocolour-" . sanitise_name($syntax_name);
+    my $font_size = 14;
+    my $char_width = 8;
+    my $line_height = 18;
+    my $margin = 8;
+    my $line_count = scalar(@{$lines});
+    my $max_columns = 0;
+
+    foreach my $line (@{$lines}) {
+        $max_columns = $line->{length} if $line->{length} > $max_columns;
+    }
+
+    my $width = ($max_columns * $char_width) + ($margin * 2);
+    my $height = ($line_count * $line_height) + ($margin * 2);
+    $width = $margin * 2 if $width < $margin * 2;
+    $height = $margin * 2 if $height < $margin * 2;
+
+    print "<svg xmlns='http://www.w3.org/2000/svg' class='nanocolour $syntax_class' width='$width' height='$height' viewBox='0 0 $width $height' font-family='monospace'>\n";
+    print "<style>\n";
+    emit_css_block(\*STDOUT, "svg ");
+    print "</style>\n";
+
+    for (my $line_index = 0; $line_index < $line_count; $line_index++) {
+        my $line = $lines->[$line_index];
+        my $y = $margin + (($line_index + 1) * $line_height) - 4;
+        my $rect_y = $margin + ($line_index * $line_height);
+        my $column = 0;
+
+        foreach my $run (@{$line->{runs}}) {
+            my $style = $style_defs{$run->{style_key}};
+            my $run_length = length($run->{text});
+            if ($style->{bg} ne "" && $style->{bg} ne "normal" && $run_length > 0) {
+                my $x = $margin + ($column * $char_width);
+                my $rect_width = $run_length * $char_width;
+                print "<rect class='$style->{classes}' x='$x' y='$rect_y' width='$rect_width' height='$line_height' />";
+            }
+            $column += $run_length;
+        }
+
+        my $x = $margin;
+        print "<text x='$x' y='$y' xml:space='preserve'>";
+        foreach my $run (@{$line->{runs}}) {
+            my $style = $style_defs{$run->{style_key}};
+            my $text = svg_escape($run->{text});
+            if ($style->{classes} ne "") {
+                print "<tspan class='$style->{classes}'>$text</tspan>";
+            } else {
+                print $text;
+            }
+        }
+        print "</text>\n";
+    }
+
+    print "</svg>\n";
 }
 
 # Process the target stream
 my $current_multi_rule = undef;
+my @rendered_lines;
 
 while (my $line = <$in_fh>) {
     chomp $line;
     my @chars = split(//, $line);
-    my @char_ansi = ("\e[0m") x (scalar(@chars) + 1);
+    my @char_styles = (($default_style->{key}) x scalar(@chars));
 
     # Apply all syntax rules in order
     for (my $rule_index = 0; $rule_index <= $#rules; $rule_index++) {
@@ -251,11 +494,11 @@ while (my $line = <$in_fh>) {
 
             if ($icase ? $line =~ /($end_re)/i : $line =~ /($end_re)/) {
                 my $end_pos = $+[0];
-                paint_range(\@char_ansi, 0, $end_pos, $rule->{ansi});
+                paint_range(\@char_styles, 0, $end_pos, $rule->{style_key});
                 $current_multi_rule = undef;
                 $search_from = $end_pos;
             } else {
-                paint_range(\@char_ansi, 0, scalar(@chars), $rule->{ansi});
+                paint_range(\@char_styles, 0, scalar(@chars), $rule->{style_key});
                 next;
             }
         }
@@ -266,7 +509,7 @@ while (my $line = <$in_fh>) {
             while ($icase ? $line =~ /($re)/gi : $line =~ /($re)/g) {
                 my $start = $-[0];
                 my $end = $+[0];
-                paint_range(\@char_ansi, $start, $end, $rule->{ansi});
+                paint_range(\@char_styles, $start, $end, $rule->{style_key});
                 if ($start == $end) {
                     if (pos($line) < length($line)) {
                         pos($line) = pos($line) + 1;
@@ -293,26 +536,28 @@ while (my $line = <$in_fh>) {
                 if ($icase ? $suffix =~ /($end_re)/i : $suffix =~ /($end_re)/) {
                     my $end_len = length($1);
                     my $end_pos_in_line = $start_end + $-[0] + $end_len;
-                    paint_range(\@char_ansi, $start, $end_pos_in_line, $rule->{ansi});
+                    paint_range(\@char_styles, $start, $end_pos_in_line, $rule->{style_key});
                     $current_multi_rule = undef;
                     pos($line) = ($end_pos_in_line > $start) ? $end_pos_in_line : $start + 1;
                 } else {
-                    paint_range(\@char_ansi, $start, scalar(@chars), $rule->{ansi});
+                    paint_range(\@char_styles, $start, scalar(@chars), $rule->{style_key});
                     last; # Continues to next line
                 }
             }
         }
     }
-    
-    # Print colored line
-    my $last_ansi = "";
-    for (my $i = 0; $i <= $#chars; $i++) {
-        if ($char_ansi[$i] ne $last_ansi) {
-            print $char_ansi[$i];
-            $last_ansi = $char_ansi[$i];
-        }
-        print $chars[$i];
-    }
-    print "\e[0m\n";
+
+    push @rendered_lines, {
+        length => scalar(@chars),
+        runs   => line_to_runs(\@chars, \@char_styles),
+    };
 }
 close($in_fh);
+
+if ($output_html) {
+    print_html_output(\@rendered_lines, $selected_syntax->{name});
+} elsif ($output_svg) {
+    print_svg_output(\@rendered_lines, $selected_syntax->{name});
+} else {
+    print_ansi_output(\@rendered_lines);
+}
