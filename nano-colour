@@ -223,6 +223,15 @@ if (!$selected_syntax) {
 # Use the pre-parsed rules
 my @rules = @{$selected_syntax->{rules}};
 
+sub paint_range {
+    my ($char_ansi, $start, $end, $ansi) = @_;
+    return if $end <= $start;
+
+    for (my $i = $start; $i < $end; $i++) {
+        $char_ansi->[$i] = $ansi;
+    }
+}
+
 # Process the target stream
 my $current_multi_rule = undef;
 
@@ -230,32 +239,34 @@ while (my $line = <$in_fh>) {
     chomp $line;
     my @chars = split(//, $line);
     my @char_ansi = ("\e[0m") x (scalar(@chars) + 1);
-    
-    # Apply multiline state from previous line if any
-    if ($current_multi_rule) {
-        my $re = $current_multi_rule->{end};
-        my $icase = $current_multi_rule->{icase};
-        for (my $i = 0; $i <= $#chars; $i++) { $char_ansi[$i] = $current_multi_rule->{ansi}; }
-        
-        if ($icase ? $line =~ /($re)/i : $line =~ /($re)/) {
-            my $end_pos = $-[0] + length($1);
-            for (my $i = $end_pos; $i <= $#chars; $i++) { $char_ansi[$i] = "\e[0m"; }
-            $current_multi_rule = undef;
-        }
-    }
-    
+
     # Apply all syntax rules in order
-    foreach my $rule (@rules) {
+    for (my $rule_index = 0; $rule_index <= $#rules; $rule_index++) {
+        my $rule = $rules[$rule_index];
         my $icase = $rule->{icase};
+        my $search_from = 0;
+
+        if ($current_multi_rule && $current_multi_rule->{index} == $rule_index) {
+            my $end_re = $rule->{end};
+
+            if ($icase ? $line =~ /($end_re)/i : $line =~ /($end_re)/) {
+                my $end_pos = $+[0];
+                paint_range(\@char_ansi, 0, $end_pos, $rule->{ansi});
+                $current_multi_rule = undef;
+                $search_from = $end_pos;
+            } else {
+                paint_range(\@char_ansi, 0, scalar(@chars), $rule->{ansi});
+                next;
+            }
+        }
+
         if ($rule->{type} eq 'single') {
             my $re = $rule->{re};
-            pos($line) = 0;
+            pos($line) = $search_from;
             while ($icase ? $line =~ /($re)/gi : $line =~ /($re)/g) {
                 my $start = $-[0];
                 my $end = $+[0];
-                for (my $i = $start; $i < $end; $i++) {
-                    $char_ansi[$i] = $rule->{ansi};
-                }
+                paint_range(\@char_ansi, $start, $end, $rule->{ansi});
                 if ($start == $end) {
                     if (pos($line) < length($line)) {
                         pos($line) = pos($line) + 1;
@@ -269,24 +280,24 @@ while (my $line = <$in_fh>) {
             my $start_re = $rule->{start};
             my $end_re = $rule->{end};
             
-            pos($line) = 0;
+            pos($line) = $search_from;
             while ($icase ? $line =~ /($start_re)/gi : $line =~ /($start_re)/g) {
                 my $start = $-[0];
                 my $start_end = $+[0];
                 
                 # Rule starts here
-                $current_multi_rule = $rule;
-                for (my $i = $start; $i <= $#chars; $i++) { $char_ansi[$i] = $rule->{ansi}; }
+                $current_multi_rule = { index => $rule_index, rule => $rule };
                 
                 # Look for end on the same line
                 my $suffix = substr($line, $start_end);
                 if ($icase ? $suffix =~ /($end_re)/i : $suffix =~ /($end_re)/) {
                     my $end_len = length($1);
                     my $end_pos_in_line = $start_end + $-[0] + $end_len;
-                    for (my $i = $end_pos_in_line; $i <= $#chars; $i++) { $char_ansi[$i] = "\e[0m"; }
+                    paint_range(\@char_ansi, $start, $end_pos_in_line, $rule->{ansi});
                     $current_multi_rule = undef;
                     pos($line) = ($end_pos_in_line > $start) ? $end_pos_in_line : $start + 1;
                 } else {
+                    paint_range(\@char_ansi, $start, scalar(@chars), $rule->{ansi});
                     last; # Continues to next line
                 }
             }
