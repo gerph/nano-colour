@@ -171,6 +171,29 @@ my %syntaxes;
 my $active_syntax;
 my %seen_rc;
 
+# Confirm a rule's regex actually compiles, reporting the offending nanorc
+# file, line and rule text rather than letting a malformed pattern fail
+# later with a confusing error pointing at this script's own source line.
+# Returns true if the regex is usable. A bad rule is reported and skipped
+# (rather than aborting the whole run), so one broken syntax definition
+# elsewhere in the nanorc directory does not stop unrelated files being
+# coloured.
+sub validate_regex {
+    my ($re, $rc_file, $line_no, $raw_line) = @_;
+    eval { qr/($re)/ };
+    return 1 unless $@;
+
+    my $err = $@;
+    $err =~ s/ at \S+ line \d+\.?\s*$//s;
+    chomp $raw_line;
+    $raw_line =~ s/^\s+|\s+$//g;
+    warn "nano-colour: invalid regular expression in $rc_file, line $line_no - rule skipped:\n" .
+         "  $raw_line\n" .
+         "  Pattern: $re\n" .
+         "  $err\n";
+    return 0;
+}
+
 sub parse_nanorc {
     my ($rc_file) = @_;
     $rc_file = File::Spec->rel2abs($rc_file);
@@ -216,7 +239,22 @@ sub parse_nanorc {
                 my ($s, $e) = ($1, $2);
                 $s =~ s/\\</\\b/g; $s =~ s/\\>/\\b/g;
                 $e =~ s/\\</\\b/g; $e =~ s/\\>/\\b/g;
-                push @{$active_syntax->{rules}}, { type => 'multi', start => $s, end => $e, style_key => $style->{key}, icase => $icase };
+                if (validate_regex($s, $rc_file, $., $_) && validate_regex($e, $rc_file, $., $_)) {
+                    push @{$active_syntax->{rules}}, { type => 'multi', start => $s, end => $e, style_key => $style->{key}, icase => $icase };
+                }
+            } elsif ($rest =~ /\bstart=/ && $rest =~ /\bend=/) {
+                # Looks like a start=/end= rule, but didn't match the strict
+                # form above (e.g. an unescaped double quote embedded in the
+                # pattern). Report this clearly and skip it, rather than
+                # silently falling through to the single-line tokeniser
+                # below, which would mangle it into one or more bogus
+                # patterns that could fail confusingly much later.
+                my $raw_line = $_;
+                chomp $raw_line;
+                $raw_line =~ s/^\s+|\s+$//g;
+                warn "nano-colour: malformed start=/end= rule in $rc_file, line $. - rule skipped:\n" .
+                     "  $raw_line\n" .
+                     "  (embedded double quotes in the pattern must be backslash-escaped, e.g. \\\")\n";
             } else {
                 my @raw = split(/(\s+)/, $rest);
                 while (@raw) {
@@ -232,6 +270,7 @@ sub parse_nanorc {
                     $p =~ s/"$//;
                     next if $p eq "";
                     $p =~ s/\\</\\b/g; $p =~ s/\\>/\\b/g;
+                    next unless validate_regex($p, $rc_file, $., $_);
                     push @{$active_syntax->{rules}}, { type => 'single', re => $p, style_key => $style->{key}, icase => $icase };
                 }
             }

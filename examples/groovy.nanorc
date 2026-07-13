@@ -18,7 +18,7 @@ color yellow ""(\\.|[^"])*"" "'(\\.|[^'])*'"
 ##  the way that it finds the first match of the start sequence in order to highlight
 ##  regions; the 'def|class|...' check is just to stop the quotes from colouring the
 ##  entire file)
-color yellow start=""""([^"]|$)" end=""""|^( *def|class)"
+color yellow start="\"\"\"([^\"]|$)" end="\"\"\"|^( *def|class)"
 color yellow start="'''([^']|$)" end="'''|^( *def|class)"
 
 
