@@ -33,9 +33,9 @@ static char *read_var(const char *name, char *buf, size_t size)
     int len;
     _kernel_oserror *err;
 
-    err = _swix(OS_ReadVarVal, _INR(0,4)|_OUT(2),
-                name, buf, (int)(size - 1), 0, 3, &len);
-    if (err || len <= 0) {
+    err = _swix(OS_ReadVarVal, _INR(0, 4) | _OUT(2), name, buf, (int)(size - 1), 0, 3, &len);
+    if (err || len <= 0)
+    {
         return NULL;
     }
     buf[len] = '\0';
@@ -44,13 +44,17 @@ static char *read_var(const char *name, char *buf, size_t size)
 
 static void free_cache_entry(SyntaxCache *entry)
 {
-    if (!entry) return;
+    if (!entry)
+        return;
 
     free(entry->name);
     free(entry->path);
-    if (entry->has_syntax_re) regfree(&entry->syntax_re);
-    if (entry->has_magic_re) regfree(&entry->magic_re);
-    if (entry->loaded_syntax) nanocolour_free_syntax(entry->loaded_syntax);
+    if (entry->has_syntax_re)
+        regfree(&entry->syntax_re);
+    if (entry->has_magic_re)
+        regfree(&entry->magic_re);
+    if (entry->loaded_syntax)
+        nanocolour_free_syntax(entry->loaded_syntax);
     free(entry);
 }
 
@@ -61,10 +65,12 @@ static void add_to_cache(const char *path)
     NanoStatus status;
 
     status = nanocolour_get_syntax_info(path, &info);
-    if (status != NANO_OK) return;
+    if (status != NANO_OK)
+        return;
 
     entry = calloc(1, sizeof(SyntaxCache));
-    if (!entry) {
+    if (!entry)
+    {
         free(info.name);
         free(info.syntax_regex);
         free(info.magic_regex);
@@ -74,20 +80,26 @@ static void add_to_cache(const char *path)
     entry->path = my_strdup(path);
     entry->name = info.name;
 
-    if (!entry->path) {
+    if (!entry->path)
+    {
         free_cache_entry(entry);
         free(info.syntax_regex);
         free(info.magic_regex);
         return;
     }
 
-    if (info.syntax_regex) {
-        if (regcomp(&entry->syntax_re, info.syntax_regex, REG_EXTENDED | REG_NOSUB | REG_ICASE) == 0) {
+    if (info.syntax_regex)
+    {
+        if (regcomp(&entry->syntax_re, info.syntax_regex, REG_EXTENDED | REG_NOSUB | REG_ICASE) ==
+            0)
+        {
             entry->has_syntax_re = 1;
         }
     }
-    if (info.magic_regex) {
-        if (regcomp(&entry->magic_re, info.magic_regex, REG_EXTENDED | REG_NOSUB | REG_ICASE) == 0) {
+    if (info.magic_regex)
+    {
+        if (regcomp(&entry->magic_re, info.magic_regex, REG_EXTENDED | REG_NOSUB | REG_ICASE) == 0)
+        {
             entry->has_magic_re = 1;
         }
     }
@@ -100,14 +112,13 @@ static void add_to_cache(const char *path)
 }
 
 static NanoStatus cache_loaded_syntax(const char *name,
-                                      const char *path,
-                                      Syntax *syntax,
-                                      Syntax **syntax_out)
+                                      const char *path, Syntax *syntax, Syntax **syntax_out)
 {
     SyntaxCache *entry;
 
     entry = calloc(1, sizeof(SyntaxCache));
-    if (!entry) {
+    if (!entry)
+    {
         nanocolour_free_syntax(syntax);
         return NANO_ERROR_NOMEM;
     }
@@ -116,7 +127,8 @@ static NanoStatus cache_loaded_syntax(const char *name,
     entry->path = my_strdup(path);
     entry->loaded_syntax = syntax;
 
-    if (!entry->name || !entry->path) {
+    if (!entry->name || !entry->path)
+    {
         free_cache_entry(entry);
         return NANO_ERROR_NOMEM;
     }
@@ -128,9 +140,7 @@ static NanoStatus cache_loaded_syntax(const char *name,
 }
 
 static NanoStatus try_named_path(const char *resolved_dir,
-                                 const char *leaf,
-                                 const char *syntax_name,
-                                 Syntax **syntax_out)
+                                 const char *leaf, const char *syntax_name, Syntax **syntax_out)
 {
     char full_path[DISCOVERY_PATH_SIZE];
     Syntax *syntax;
@@ -139,21 +149,24 @@ static NanoStatus try_named_path(const char *resolved_dir,
     sprintf(full_path, "%s.%s", resolved_dir, leaf);
     syntax = NULL;
     status = nanocolour_parse_rc(full_path, &syntax);
-    if (status == NANO_OK) {
+    if (status == NANO_OK)
+    {
         return cache_loaded_syntax(syntax_name, full_path, syntax, syntax_out);
     }
 
     sprintf(full_path, "%s.%s/nanorc", resolved_dir, leaf);
     syntax = NULL;
     status = nanocolour_parse_rc(full_path, &syntax);
-    if (status == NANO_OK) {
+    if (status == NANO_OK)
+    {
         return cache_loaded_syntax(syntax_name, full_path, syntax, syntax_out);
     }
 
     sprintf(full_path, "%s.%s.nanorc", resolved_dir, leaf);
     syntax = NULL;
     status = nanocolour_parse_rc(full_path, &syntax);
-    if (status == NANO_OK) {
+    if (status == NANO_OK)
+    {
         return cache_loaded_syntax(syntax_name, full_path, syntax, syntax_out);
     }
 
@@ -167,21 +180,26 @@ static NanoStatus try_named_syntax(const char *syntax_name, Syntax **syntax_out)
     size_t i;
     NanoStatus status;
 
-    if (!read_var("NanoRCs$Dir", resolved_dir, sizeof(resolved_dir))) {
+    if (!read_var("NanoRCs$Dir", resolved_dir, sizeof(resolved_dir)))
+    {
         strcpy(resolved_dir, "nanorcs");
     }
 
-    for (i = 0; syntax_name[i] != '\0' && i < sizeof(lowered) - 1; i++) {
+    for (i = 0; syntax_name[i] != '\0' && i < sizeof(lowered) - 1; i++)
+    {
         lowered[i] = (char)tolower((unsigned char)syntax_name[i]);
     }
     lowered[i] = '\0';
 
     status = try_named_path(resolved_dir, syntax_name, syntax_name, syntax_out);
-    if (status == NANO_OK) return status;
+    if (status == NANO_OK)
+        return status;
 
-    if (strcmp(lowered, syntax_name) != 0) {
+    if (strcmp(lowered, syntax_name) != 0)
+    {
         status = try_named_path(resolved_dir, lowered, syntax_name, syntax_out);
-        if (status == NANO_OK) return status;
+        if (status == NANO_OK)
+            return status;
     }
 
     return NANO_ERROR_FILE;
@@ -195,16 +213,19 @@ void syntax_cache_init(void)
     int buffer_w[DISCOVERY_BUFFER_WORDS];
     char *buffer;
 
-    if (cache_initialised) return;
+    if (cache_initialised)
+        return;
 
     buffer = (char *)buffer_w;
     context = 0;
 
-    if (!read_var("NanoRCs$Dir", resolved_dir, sizeof(resolved_dir))) {
+    if (!read_var("NanoRCs$Dir", resolved_dir, sizeof(resolved_dir)))
+    {
         strcpy(resolved_dir, "nanorcs");
     }
 
-    while (1) {
+    while (1)
+    {
         _kernel_oserror *err;
         _kernel_swi_regs regs;
         char full_path[DISCOVERY_PATH_SIZE];
@@ -213,19 +234,21 @@ void syntax_cache_init(void)
         char *leaf;
 
         regs.r[0] = 12;
-        regs.r[1] = (_kernel_reg)resolved_dir;
-        regs.r[2] = (_kernel_reg)buffer;
+        regs.r[1] = (_kernel_reg) resolved_dir;
+        regs.r[2] = (_kernel_reg) buffer;
         regs.r[3] = 1;
         regs.r[4] = context;
         regs.r[5] = sizeof(buffer_w);
-        regs.r[6] = (_kernel_reg)"*";
+        regs.r[6] = (_kernel_reg) "*";
 
         err = _kernel_swi(OS_GBPB, &regs, &regs);
-        if (err) break;
+        if (err)
+            break;
 
         nread = regs.r[3];
         context = regs.r[4];
-        if (nread == 0) break;
+        if (nread == 0)
+            break;
 
         leaf = buffer + 24;
         sprintf(full_path, "%s.%s", resolved_dir, leaf);
@@ -233,16 +256,19 @@ void syntax_cache_init(void)
         sprintf(full_path_alt, "%s.%s.nanorc", resolved_dir, leaf);
         dprintf("Discovery: adding %s\n", full_path);
         add_to_cache(full_path);
-        if (strcmp(full_path, full_path_mid) != 0) {
+        if (strcmp(full_path, full_path_mid) != 0)
+        {
             dprintf("Discovery: adding %s\n", full_path_mid);
             add_to_cache(full_path_mid);
         }
-        if (strcmp(full_path, full_path_alt) != 0) {
+        if (strcmp(full_path, full_path_alt) != 0)
+        {
             dprintf("Discovery: adding %s\n", full_path_alt);
             add_to_cache(full_path_alt);
         }
 
-        if (context == -1) break;
+        if (context == -1)
+            break;
     }
 
     cache_initialised = 1;
@@ -250,7 +276,8 @@ void syntax_cache_init(void)
 
 void syntax_cache_final(void)
 {
-    while (global_syntax_cache) {
+    while (global_syntax_cache)
+    {
         SyntaxCache *next;
 
         next = global_syntax_cache->next;
@@ -260,24 +287,31 @@ void syntax_cache_final(void)
     cache_initialised = 0;
 }
 
-static const char *first_line_from_buffer(const char *buffer, size_t length, char *line, size_t line_size)
+static const char *first_line_from_buffer(const char *buffer, size_t length, char *line,
+                                          size_t line_size)
 {
     size_t copy;
     const char *newline;
 
-    if (!buffer || length == 0 || line_size == 0) {
-        if (line_size != 0) line[0] = '\0';
+    if (!buffer || length == 0 || line_size == 0)
+    {
+        if (line_size != 0)
+            line[0] = '\0';
         return line;
     }
 
     newline = memchr(buffer, '\n', length);
-    if (newline) {
+    if (newline)
+    {
         copy = (size_t)(newline - buffer);
-    } else {
+    }
+    else
+    {
         copy = length;
     }
 
-    if (copy >= line_size) {
+    if (copy >= line_size)
+    {
         copy = line_size - 1;
     }
 
@@ -288,8 +322,10 @@ static const char *first_line_from_buffer(const char *buffer, size_t length, cha
 
 static NanoStatus load_cached_syntax(SyntaxCache *entry, Syntax **syntax_out)
 {
-    if (!entry->loaded_syntax) {
-        if (nanocolour_parse_rc(entry->path, &entry->loaded_syntax) != NANO_OK) {
+    if (!entry->loaded_syntax)
+    {
+        if (nanocolour_parse_rc(entry->path, &entry->loaded_syntax) != NANO_OK)
+        {
             return NANO_ERROR_FILE;
         }
     }
@@ -299,50 +335,58 @@ static NanoStatus load_cached_syntax(SyntaxCache *entry, Syntax **syntax_out)
 }
 
 NanoStatus syntax_find(const char *syntax_name,
-                       const char *buffer,
-                       size_t length,
-                       Syntax **syntax_out)
+                       const char *buffer, size_t length, Syntax **syntax_out)
 {
     SyntaxCache *entry;
     SyntaxCache *default_entry;
     char first_line[DISCOVERY_VAR_SIZE];
 
-    if (!syntax_out) return NANO_ERROR_INVALID_ARG;
+    if (!syntax_out)
+        return NANO_ERROR_INVALID_ARG;
     *syntax_out = NULL;
 
-    if (!cache_initialised) syntax_cache_init();
+    if (!cache_initialised)
+        syntax_cache_init();
 
     default_entry = NULL;
     first_line_from_buffer(buffer, length, first_line, sizeof(first_line));
 
-    if (syntax_name && *syntax_name) {
+    if (syntax_name && *syntax_name)
+    {
         NanoStatus status;
 
         status = try_named_syntax(syntax_name, syntax_out);
-        if (status == NANO_OK) {
+        if (status == NANO_OK)
+        {
             return NANO_OK;
         }
     }
 
-    for (entry = global_syntax_cache; entry != NULL; entry = entry->next) {
-        if (entry->name && my_strcasecmp(entry->name, "default") == 0) {
+    for (entry = global_syntax_cache; entry != NULL; entry = entry->next)
+    {
+        if (entry->name && my_strcasecmp(entry->name, "default") == 0)
+        {
             default_entry = entry;
         }
 
-        if (syntax_name && *syntax_name) {
-            if (entry->name && my_strcasecmp(entry->name, syntax_name) == 0) {
+        if (syntax_name && *syntax_name)
+        {
+            if (entry->name && my_strcasecmp(entry->name, syntax_name) == 0)
+            {
                 return load_cached_syntax(entry, syntax_out);
             }
             continue;
         }
 
         if (entry->has_magic_re && first_line[0] != '\0' &&
-            regexec(&entry->magic_re, first_line, 0, NULL, 0) == 0) {
+            regexec(&entry->magic_re, first_line, 0, NULL, 0) == 0)
+        {
             return load_cached_syntax(entry, syntax_out);
         }
     }
 
-    if (!syntax_name && default_entry) {
+    if (!syntax_name && default_entry)
+    {
         return load_cached_syntax(default_entry, syntax_out);
     }
 
