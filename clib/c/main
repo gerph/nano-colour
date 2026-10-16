@@ -134,13 +134,15 @@ int main(int argc, char *argv[])
 
     if (argc < 4)
     {
+        int help = (argc == 2 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "-help") == 0));
+
         printf("NanoColour " Module_FullVersionAndDate "\n");
         printf("Syntax: *NanoColour -decode <file> <nanorc>\n");
         printf("        *NanoColour -draw <file> <nanorc>\n");
 #ifdef FORTIFY
         Fortify_LeaveScope();
 #endif
-        return EXIT_FAILURE;
+        return help ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (strcmp(argv[1], "-decode") == 0)
