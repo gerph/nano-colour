@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<index>
+<dirs output="../output/prminxml/pages"
+      index="../output/prminxml"
+      help="../output/prminxml/help"
+      header="../output/prminxml/header"
+      input=".."
+      temp="../output/prminxml/tmp" />
+<options
+    hide-empty="no"
+    include-source="no"
+    make-contents="no"
+    include-sections="no"
+    include-sections-depth="1"
+    catalog-version="103"
+    page-format="html5"
+    page-css-base="standard"
+    page-css-variant="prm body-fraunces heading-raleway webfont-fraunces webfont-raleway large-bullets"
+    page-css-file="none"
+    index-css-base="standard"
+    index-css-variant="prm body-fraunces heading-raleway webfont-fraunces webfont-raleway large-bullets no-edge-index"
+    index-css-file="none"
+    docgroup-name="nano-colour"
+    docgroup-part=""
+    chapter-numbers="yes"
+    chapter-contents="no"
+    edgeindex-max="4"
+    />
+
+<make-index type="command" />
+<make-index type="swi" />
+<make-index type="error" />
+<make-index type="sysvar" />
+<make-indexdata/>
+<make-filelist/>
+
+<footer>
+Copyright 2026 Charles Ferguson. Supplied under the MIT licence used by the nano-colour
+project. This documentation describes work in progress, and may not be complete.
+</footer>
+
+<section title="Command line tool" dir="prminxml">
+    <page href="nanocolourtool">nano-colour</page>
+</section>
+
+<section title="RISC OS module" dir="clib/prminxml">
+    <page href="nanocolour">NanoColour</page>
+</section>
+</index>
