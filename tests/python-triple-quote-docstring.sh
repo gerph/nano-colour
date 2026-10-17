@@ -42,7 +42,7 @@ perl -e '
 
     die "Expected 5 output lines\n" unless @lines == 5;
 
-    my $brightgreen = "\e[1;32m";
+    my $brightgreen = "\e[92m";
 
     die "Docstring opening line was not coloured brightgreen\n"
         unless $lines[2] =~ /\Q$brightgreen\E"""This is a/;
