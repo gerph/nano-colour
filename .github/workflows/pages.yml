@@ -35,6 +35,7 @@ jobs:
           files: prminxml/index.xml
           format: index
           output: site-lint
+          log-directory: site-lint/logs
           style: prm
 
       - name: Build every style and the landing page
