@@ -1,0 +1,28 @@
+syntax "DOT" "\.(dot|gv|gv-dot)$"
+
+## Declarations
+color brightcyan "\<(digraph|edge|graph|node|subgraph)\>"
+
+## Keywords
+color cyan "\<(arrowhead|arrowsize|arrowtail|bgcolor|center|color|compound)\>"
+color cyan "\<(constraint|decorateP|dir|distortion)\>"
+color cyan "\<(fillcolor|fontcolor|fontname|fontsize|headclip|headlabel|height)\>"
+color cyan "\<(label(angle|distance|fontcolor|fontname|fontsize|just|)|layers|layer)\>"
+color cyan "\<(margin|mclimit|minlen|name|nodesep|nslimit|ordering|orientation)\>"
+color cyan "\<(pagedir|page|peripheries|port_label_distance|rankdir|ranksep|rank|ratio)\>"
+color cyan "\<(regular|rotate|samehead|sametail|shapefile|shape|sides|size|skew|style)\>"
+color cyan "\<(tailclip|taillabel|URL|weight|width)\>"
+
+## Attribute assignment / separation
+color brightblack "=|,|;"
+
+## Symbols
+color magenta "->|--"
+color magenta "\{|}|\[|]"
+
+## Quoted strings
+color yellow  ""(\\.|[^"])*"|'(\\.|[^'])*'"
+
+## Comments
+color green   "(^|[[:space:]])(//|#).*"
+color green   start="/\*" end="\*/"

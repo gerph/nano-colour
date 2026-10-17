@@ -1,0 +1,45 @@
+syntax "Terraform" "\.tf$"
+
+## Types
+color magenta "^[[:space:]]*(module|variable|data|resource|provider|output|terraform|locals)[[:space:]]"
+## Booleans
+color brightyellow "\<(true|false)\>"
+## 'Key =' declarations
+color cyan "^[[:space:]]*[a-zA-Z_][a-zA-Z_0-9-]*[[:space:]]*="
+color white "[[:space:]]*=[[:space:]]*"
+## Strings and numbers
+color cyan ""(\\.|[^"])*""
+color cyan "\<[0-9]+(\.[0-9]+)?\>" "\<0x[0-9A-Fa-f]+\>"
+## Comments
+color green "(^|[[:space:]]+)#.*$"
+color green "//.*"
+color green start="/\*" end="\*/"
+## Interpolations
+color yellow "\$\{[[:alpha:]_][[:alnum:]_]*(\.([[:alpha:]_][[:alnum:]_]*|[0-9]+)|\*)+.*}"
+color brightyellow "\$\{(var|self|data|count|path|terraform|local)"
+color yellow "\$\{"
+## Functions within interpolations
+color brightyellow "\<(basename|base64(encode|decode|sha256|sha512)|ceil|chomp|cidr(host|netmask|subnet)|coalesce|coalescelist|compact|concat|element|file|floor|format(list)?|index|join|jsonencode|keys|length|list|log|lookup|lower|map|matchkeys|max|merge|min|md5|pathexpand|replace|sha(1|256|512)|signum|slice|sort|split|substr|timestamp|title|trimspace|upper|uuid|values|zipmap)\("
+
+
+
+## Terraform variable files
+syntax "Terraform" "\.tfvars$"
+
+## Booleans
+color brightyellow "\<(true|false)\>"
+## 'Key =' declarations
+color cyan "^[a-zA-Z_][a-zA-Z_0-9-]*[[:space:]]*=[[:space:]]"
+color white "[[:space:]]*=[[:space:]]*"
+## Strings and numbers
+color cyan ""(\\.|[^"])*""
+color cyan "\<[0-9]+(\.[0-9]+)?\>" "\<0x[0-9A-Fa-f]+\>"
+## Comments
+color green "(^|[[:space:]]+)#.*$"
+color green start="/\*" end="\*/"
+## Interpolations
+color yellow "\$\{[[:alpha:]_][[:alnum:]_]*(\.([[:alpha:]_][[:alnum:]_]*|[0-9]+)|\*)+.*}"
+color brightyellow "\$\{(var|self|data|count|path|terraform)"
+color yellow "\$\{"
+## Functions within interpolations
+color brightyellow "\<(basename|base64(encode|decode|sha256|sha512)|ceil|chomp|cidr(host|netmask|subnet)|coalesce|coalescelist|compact|concat|element|file|floor|format(list)?|index|join|jsonencode|keys|length|list|log|lookup|lower|map|matchkeys|max|merge|min|md5|pathexpand|replace|sha(1|256|512)|signum|slice|sort|split|substr|timestamp|title|trimspace|upper|uuid|values|zipmap)\("

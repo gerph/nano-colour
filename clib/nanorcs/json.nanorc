@@ -1,0 +1,23 @@
+syntax "JSON" "\.json$"
+header "^\{$"
+comment ""
+
+## Decimal, octal and hexadecimal numbers
+color green "\<[-+]?([1-9][0-9]*|0[0-7]*|0x[0-9a-fA-F]+)\>"
+
+## Floating point number with at least one digit before decimal point
+color cyan "\<[-+]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+)([EePp][+-]?[0-9]+)?[fFlL]?"
+color cyan "\<[-+]?([0-9]+[EePp][+-]?[0-9]+)[fFlL]?"
+
+## Special values
+color cyan "\<(true|false|null)\>"
+
+## String
+color brightyellow "\"(\\"|[^"])*\""
+## Restore the quotes to white
+color white "\""
+## Escapes
+color magenta   "\\u[0-9a-fA-F]{4}|\\[bfnrt'"/\\]"
+
+## Trailing spaces
+color ,red "[[:space:]]+$"

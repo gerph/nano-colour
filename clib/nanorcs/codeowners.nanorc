@@ -1,0 +1,22 @@
+syntax "codeowners" "CODEOWNERS$"
+comment "#"
+
+# Comments.
+color green "^#.*| #.*"
+
+# Spaces in front of tabs.
+color ,red " +	+"
+
+# Paths at the front
+color brightblue "^([^# /]*/)*[^#/ ]+"
+color blue "^([^# /]*/)*"
+
+# Invalid lines
+color red "^[^# ]+ +[^#@]*$"
+color red "^[^# ]+$"
+
+# Email addresses.
+color magenta " [[:alnum:].%_+-]+@[[:alnum:].-]+\.[[:alpha:]]{2,}\b"
+
+# Groups
+color cyan " @[[:alnum:]/.:-]+\b"

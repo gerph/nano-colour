@@ -1,5 +1,7 @@
 # nano-colour - colouring files using nanorc definitions
 
+[![Documentation](https://img.shields.io/badge/Generated-Documentation-yellow)](https://gerph.github.io/nano-colour/)
+
 This repository provides a Perl-based syntax highlighter that leverages `nanorc` configuration files to provide ANSI-coloured output in the terminal, or HTML and SVG output for post-processing.
 
 ## Purpose

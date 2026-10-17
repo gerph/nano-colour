@@ -1,0 +1,31 @@
+syntax "Jinja2" "\.j2$"
+header "^\{#"
+
+## Statements
+color brightyellow start="\{%-?" end="-?%\}"
+color magenta "\{%-? *(if|else|elif|endif|set|endset|for|endfor|macro|endmacro|call|endcall|include|import|break|continue|with|endwith|trans|endtrans|raw|endraw|block|endblock|extends)"
+color magenta " +as +[a-zA-Z][a-zA-Z_0-9]+ +(ignore missing +)?((with|without) context +)?-?%\}"
+color red "\{%-?([^- ]|$)" "(^|[^ -])-?\%\}"
+color brightyellow "\{%-? " " -?%\}"
+## Expressions
+color yellow start="\{\{" end="\}\}"
+color red "\{\{([^ ]|$)"
+color yellow start="\{\{ " end="\}\}"
+color red "(^|[^ ])\}\}"
+## Not sufficient to really colour things properly.
+#color magenta "\{\{ *[^%]+ if [^%]+ else"
+color yellow "\{\{ " " \}\}"
+## Numbers
+color cyan "[0-9]+(\.[0-9]+)?"
+## Special variables
+color brightblue "loop\.((rev)?index0?|first|last|length|cycle|depth0?)"
+## Operators
+color magenta " (not )?is (not )?(callable|defined|divisibleby|equalto|escaped|even|greaterthan|iterable|lessthan|mapping|none|odd|sameas|sequence|string|undefined|upper)"
+color magenta "\| *(abs|attr|batch|capitalize|center|dictsort|escape|filesizeformat|first|float|forceescape|format|groupby|indent|int|join|last|length|list|lower|map|pprint|random|reject|rejectattr|replace|reverse|round|safe|select|selectattr|slice|sort|string|striptags|sum|title|tojson|trim|truncate|upper|urlencode|urlize|wordcount|wordwrap|xmlattr)"
+color brightblue " (-|\+|\*|/|//|%|=|==|!=) "
+color brightblue "\|"
+## Strings
+color cyan ""(\\.|[^"])*""
+color cyan "'(\\.|[^'])*'"
+## Comments
+color green start="\{#" end="#\}"

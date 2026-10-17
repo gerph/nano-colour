@@ -1,0 +1,26 @@
+/*******************************************************************
+ * File:        module_errors
+ * Purpose:     Embedded error declarations for NanoColour module
+ * Author:      OpenAI Codex
+ ******************************************************************/
+
+#ifndef MODULE_ERRORS_H
+#define MODULE_ERRORS_H
+
+#include "kernel.h"
+
+extern void __err_err_BadFlags(void);
+extern void __err_err_BadHandle(void);
+extern void __err_err_BadParameter(void);
+extern void __err_err_NoSyntax(void);
+extern void __err_err_FontNotFound(void);
+extern void __err_err_NoMemory(void);
+
+#define err_BadFlags     ((_kernel_oserror *)(int)__err_err_BadFlags)
+#define err_BadHandle    ((_kernel_oserror *)(int)__err_err_BadHandle)
+#define err_BadParameter ((_kernel_oserror *)(int)__err_err_BadParameter)
+#define err_NoSyntax     ((_kernel_oserror *)(int)__err_err_NoSyntax)
+#define err_FontNotFound ((_kernel_oserror *)(int)__err_err_FontNotFound)
+#define err_NoMemory     ((_kernel_oserror *)(int)__err_err_NoMemory)
+
+#endif

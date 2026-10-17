@@ -1,0 +1,76 @@
+## A YAML syntax (including common ansible directory names)
+syntax "YAML" "\.ya?ml$"
+header "^---" "%YAML"
+
+## Types
+color magenta "(^| )!!(binary|bool|float|int|map|null|omap|seq|set|str) "
+## Booleans
+color brightyellow "\<(true|false)\>"
+## The core identifiers for YAML
+## - any hash keys names
+color magenta "^[[:space:]]*(-[[:space:]]+)?[a-zA-Z_][a-zA-Z_0-9/\$\-]*:([[:space:]]|$)"
+## - the colon and | or > which indicates a continuation
+color brightblue ":([[:space:]]+[|>])?$"
+## - list value delimiters
+color brightblue "\[" "\]"
+## - list element introducers
+color brightblue "^[[:space:]]*- "
+## Labels and references
+color cyan "[[:space:]][\*&][A-Za-z0-9]+"
+## Strings and numbers
+color yellow ""(\\.|[^"])*"|'(\\.|[^'])*'"
+color yellow "\<[0-9]+(\.[0-9]+)?\>"
+## Comments
+color green "(^|[[:space:]]+)#([^{].*)?$"
+## Directives
+color brightmagenta  "^---" "^\.\.\." "^%YAML" "^%TAG"
+## Misbalanced indentation
+## (this really doesn't work - consider moving it up to the top to be processed first,
+## and adding in cases for highlighting spaces plus '-'.
+#color ,red "^(    )+ +"
+## Trailing spaces
+color ,red "[[:space:]]+$"
+
+
+## YAML syntax specific to Ansible
+syntax "YAML-ansible" "main\.ya?ml$" "(^|/)(host|group)_vars/" "(^|/)roles/.*/tasks/.*\.ya?ml$"
+
+## Types
+color magenta "(^| )!!(binary|bool|float|int|map|null|omap|seq|set|str) "
+## Booleans
+color brightyellow "\<(YES|yes|Y|y|ON|on|NO|no|N|n|OFF|off)\>"
+color white "(YES|yes|Y|y|ON|on|NO|no|N|n|OFF|off)-"
+color brightyellow "\<(true|false)\>"
+## The core identifiers for YAML
+## - any hash keys names
+color magenta "^[[:space:]]*(-[[:space:]]+)?[a-zA-Z_][a-zA-Z_0-9-]*:([[:space:]]|$)"
+##   - The action name
+color brightmagenta "^(- |  )[a-zA-Z_][a-zA-Z_0-9-]*:([[:space:]]|$)"
+##   - The Ansible operations
+color magenta "^(- |  )(name|vars|args|notify|tags|when|register|until|delay|retries):([[:space:]]|$)"
+##     'with' can use any lookup, so we're quite generic here.
+color magenta "^(- |  )(with_[a-z]+):([[:space:]]|$)"
+color magenta "^(- |  )(changed_when|failed_when|ignore_errors):([[:space:]]|$)"
+color magenta "^(- |  )(user|remote_user|sudo_user|sudo|become_user|become):([[:space:]]|$)"
+color magenta "^(- |  )(environment|local_action|delegate_to|run_once|always_run):([[:space:]]|$)"
+## - the colon and | or > which indicates a continuation
+color brightblue ":([[:space:]]+[|>])?$"
+## - list value delimiters
+color brightblue "\[" "\]"
+## - list element introducers
+color brightblue "^[[:space:]]*- "
+## Labels and references
+color cyan "[[:space:]][\*&][A-Za-z0-9]+"
+## Strings and numbers
+color yellow ""(\\.|[^"])*"|'(\\.|[^'])*'"
+color yellow "\<[0-9]+(\.[0-9]+)?\>"
+## Comments
+color green "(^|[[:space:]]+)#([^{].*)?$"
+## Directives
+color brightmagenta  "^---" "^\.\.\." "^%YAML" "^%TAG"
+## Misbalanced indentation
+## (this really doesn't work - consider moving it up to the top to be processed first,
+## and adding in cases for highlighting spaces plus '-'.
+#color ,red "^(    )+ +"
+## Trailing spaces
+color ,red "[[:space:]]+$"

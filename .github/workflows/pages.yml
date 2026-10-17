@@ -1,0 +1,63 @@
+---
+# Publish an indexed PRM-in-XML manual set to GitHub Pages, in several styles,
+# with a landing page describing each form.
+# Pages must be enabled with the source set to 'GitHub Actions'.
+
+name: Documentation
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches: ["*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Installs riscos-prminxml, and lints the index as a gate.
+      - name: Install and lint PRM-in-XML
+        uses: gerph/riscos-prminxml-action@v1
+        with:
+          files: prminxml/index.xml
+          format: index
+          output: site-lint
+          log-directory: site-lint/logs
+          style: prm
+
+      - name: Build every style and the landing page
+        run: |
+          prminxml/pages-build.sh prminxml/index.xml site "nano-colour documentation" "Documentation for the nano-colour command line tool and the NanoColour RISC OS module."
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Documentation
+          path: site
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  publish:
+    needs: build-docs
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

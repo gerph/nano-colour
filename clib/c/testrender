@@ -1,0 +1,98 @@
+/*******************************************************************
+ * File:        testrender
+ * Purpose:     Demonstrate NanoColour rendering
+ * Author:      Gemini CLI
+ ******************************************************************/
+
+#include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#ifdef FORTIFY
+#include "Fortify/fortify.h"
+#endif
+
+#include "swis.h"
+#include "GContext/gcontext.h"
+#include "nanocolour.h"
+#include "nanocolour_render.h"
+
+#define FONT_NAME "Corpus.Medium"
+#define FONT_XSIZE (12*16)
+#define FONT_YSIZE (12*16)
+
+void testrender(const char *target_file, const char *nanorc_file)
+{
+    gcontext_t *gcontext = gcontext_initvdu(2);
+    size_t length;
+    char *contents = NULL;
+    Syntax *syntax = NULL;
+    ColouredFile *cf = NULL;
+    font_t font = FONT_NONE;
+    NanoRender *render = NULL;
+    bounds_t size;
+    NanoStatus status;
+
+    if (!gcontext)
+    {
+        fprintf(stderr, "testrender: Failed to initialize GContext\n");
+        return;
+    }
+
+    /* Load some data to render */
+    status = nanocolour_read_file(target_file, &contents, &length);
+    if (status != NANO_OK)
+    {
+        fprintf(stderr, "testrender: Failed to read %s\n", target_file);
+        goto cleanup;
+    }
+
+    status = nanocolour_parse_rc(nanorc_file, &syntax);
+    if (status != NANO_OK)
+    {
+        fprintf(stderr, "testrender: Failed to parse %s\n", nanorc_file);
+        goto cleanup;
+    }
+
+    status = nanocolour_colour_file(contents, length, syntax, &cf);
+    if (status != NANO_OK)
+    {
+        fprintf(stderr, "testrender: Failed to colour file\n");
+        goto cleanup;
+    }
+
+    font = gcontext->text_findfont(gcontext, FONT_NAME, FONT_XSIZE, FONT_YSIZE);
+    if (font == FONT_NONE)
+    {
+        fprintf(stderr, "testrender: Failed to find font %s\n", FONT_NAME);
+        goto cleanup;
+    }
+
+    render = nanocolour_render_create(cf, gcontext, font);
+    if (!render)
+    {
+        fprintf(stderr, "testrender: Failed to create NanoRender\n");
+        goto cleanup;
+    }
+
+    nanocolour_render_get_size(render, &size);
+    printf("Rendered size: %d x %d\n", size.width, size.height);
+
+    /* Draw it at 64, 1000 with black background and white foreground for normal text */
+    nanocolour_render_draw(render, 64, 1000, COLOUR_RGB(0, 0, 0), COLOUR_RGB(255, 255, 255), NULL);
+
+  cleanup:
+    if (render)
+        nanocolour_render_free(render);
+    if (font != FONT_NONE)
+        gcontext->text_losefont(gcontext, font);
+    if (cf)
+        nanocolour_free_coloured_file(cf);
+    if (syntax)
+        nanocolour_free_syntax(syntax);
+    if (contents)
+        free(contents);
+    /* gcontext might not need freeing or might have a specific function?
+       gcontext_initvdu doesn't seem to have a paired free in the example.
+     */
+}
